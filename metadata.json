@@ -1,0 +1,5 @@
+{
+  "name": "我的世界-马里奥",
+  "description": "一个以我的世界为主题的马里奥风格平台游戏，具有通过 Gemini AI 生成关卡、自定义角色选择和复古合成音频的功能。",
+  "requestFramePermissions": []
+}
