@@ -9,10 +9,10 @@ export const CANVAS_WIDTH = 800;
 export const CANVAS_HEIGHT = 480;
 
 // Combat
-export const PLAYER_MAX_HP = 10; // Increased from 3 to 10 for easier difficulty
-export const ATTACK_COOLDOWN = 5; // Reduced for automatic fire
-export const ATTACK_RANGE = 600; // Increased range for homing missiles
-export const PROJECTILE_SPEED = 8;
+export const PLAYER_MAX_HP = 10; 
+export const ATTACK_COOLDOWN = 15; // Slightly increased for balanced visual effects
+export const ATTACK_RANGE = 600; 
+export const PROJECTILE_SPEED = 10;
 export const BOSS_HP = 20;
 
 // 8x8 Pixel Art Color Matrices (Row by Row)
@@ -133,7 +133,8 @@ export const CHARACTERS = [
     desc: '经典英雄',
     color: '#00AAAA', 
     legs: '#0000AA', 
-    face: STEVE_FACE
+    face: STEVE_FACE,
+    projectileType: 'ARROW'
   },
   {
     id: 'Alex',
@@ -141,7 +142,8 @@ export const CHARACTERS = [
     desc: '敏捷探险家',
     color: '#638257', 
     legs: '#4C3322', 
-    face: ALEX_FACE
+    face: ALEX_FACE,
+    projectileType: 'ARROW'
   },
   {
     id: 'Zombie',
@@ -149,23 +151,26 @@ export const CHARACTERS = [
     desc: '脑子...?',
     color: '#00AAAA', 
     legs: '#0000AA', 
-    face: ZOMBIE_FACE
+    face: ZOMBIE_FACE,
+    projectileType: 'POTION'
   },
   {
     id: 'Skeleton',
     name: '骷髅',
     desc: '嘎吱嘎吱',
-    color: '#B0B0B0', // Ribs/Gray
+    color: '#B0B0B0', 
     legs: '#B0B0B0', 
-    face: SKELETON_FACE
+    face: SKELETON_FACE,
+    projectileType: 'BONE'
   },
   {
     id: 'Creeper',
     name: '苦力怕',
     desc: 'ssssss...',
     color: '#00AA00', 
-    legs: '#000000', // To differentiate feet slightly
-    face: CREEPER_FACE
+    legs: '#000000', 
+    face: CREEPER_FACE,
+    projectileType: 'TNT'
   },
   {
     id: 'Enderman',
@@ -173,23 +178,26 @@ export const CHARACTERS = [
     desc: '不要看我',
     color: '#111111', 
     legs: '#111111', 
-    face: ENDERMAN_FACE
+    face: ENDERMAN_FACE,
+    projectileType: 'PEARL'
   },
   {
     id: 'Villager',
     name: '村民',
     desc: '哈!',
-    color: '#624133', // Robe
+    color: '#624133', 
     legs: '#624133', 
-    face: VILLAGER_FACE
+    face: VILLAGER_FACE,
+    projectileType: 'POTION'
   },
   {
     id: 'Pigman',
     name: '猪人',
     desc: '中立亡灵',
-    color: '#E0AA86', // Flesh
-    legs: '#4C3322', // Loincloth
-    face: PIGMAN_FACE
+    color: '#E0AA86', 
+    legs: '#4C3322', 
+    face: PIGMAN_FACE,
+    projectileType: 'FIREBALL'
   },
   {
     id: 'Herobrine',
@@ -197,7 +205,8 @@ export const CHARACTERS = [
     desc: '被移除的传说',
     color: '#00AAAA', 
     legs: '#0000AA', 
-    face: HEROBRINE_FACE
+    face: HEROBRINE_FACE,
+    projectileType: 'SKULL'
   },
   {
     id: 'Blaze',
@@ -205,7 +214,8 @@ export const CHARACTERS = [
     desc: '燃烧吧',
     color: '#FFD700', 
     legs: '#FFA500', 
-    face: BLAZE_FACE
+    face: BLAZE_FACE,
+    projectileType: 'FIREBALL'
   }
 ];
 
@@ -220,10 +230,10 @@ export const DEFAULT_LEVEL_MAP = [
   ".............................................................DDDDD................................",
   ".......QQQ.....................................^............DDDDDDD...............................",
   ".......................C...................................DDDDDDDDD............................B.",
-  "....G.......G.........GGG.......M.......G......C......M...DDDDDDDDDDD.......................EEEEEE",
+  "....G.......G.........GGG.......M.......G......C......M...DDDDDDDDDDD...........................",
   "GGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG...GGGGGGGGGGGGGGGGGGGGGGGGG",
   "DDDDDDDDDDDDDDDD...DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD...DDDDDDDDDDDDDDDDDDDDDDDDD",
   "DDDDDDDDDDDDDDDDLLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDLLLDDDDDDDDDDDDDDDDDDDDDDDDD",
   "SSSSSSSSSSSSSSSSLLLSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSLLLSSSSSSSSSSSSSSSSSSSSSSSSS",
-  "##################################################################################################"
+  "#################################################################################################E"
 ];

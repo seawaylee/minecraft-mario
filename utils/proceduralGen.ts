@@ -58,7 +58,7 @@ export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType
   for (let x = 0; x < width; x++) {
       // Start/End/Boss Arena flat
       if (x < 15 || x > width - 30) {
-          groundLevel = 2;
+          groundLevel = 3; // Make end area slightly higher/stable
       } else {
           // Random terrain changes
           if (Math.random() < 0.2) {
@@ -144,24 +144,32 @@ export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType
 
   // 5. Boss & Exit
   const bossArenaStart = width - 25;
+  // Ensure flat platform for boss arena and portal
+  const arenaHeight = height - 5; // Fixed height for arena floor
+  
   for (let x = bossArenaStart; x < width; x++) {
-      for (let y = 0; y < height - 2; y++) {
-          map[y][x] = '.';
+      for (let y = 0; y < height; y++) {
+          if (y >= arenaHeight) {
+              if (biome === 'THE_END') {
+                  map[y][x] = 'X'; 
+              } else {
+                  map[y][x] = y === height - 1 ? bedrockBlock : fillBlock;
+              }
+          } else {
+              map[y][x] = '.';
+          }
       }
-      // Ensure flat ground for arena
-      if (biome === 'THE_END') {
-          map[height-2][x] = 'O'; // Obsidian platform for Boss
-      } else {
-          map[height-2][x] = bedrockBlock; 
-          map[height-1][x] = bedrockBlock; 
-      }
+      // Top layer
+       if (biome !== 'THE_END') map[arenaHeight][x] = topBlock;
   }
 
   // Place Boss floating
-  map[height-8][width-15] = 'B'; 
+  map[height-10][width-15] = 'B'; 
   
-  // Place Portal at very end
-  map[height-3][width-4] = 'E';
+  // Place Portal at very end, ON TOP of the arena floor
+  // Arena floor is at arenaHeight (e.g., index 10). So Portal sits at 9.
+  // 'E' marks the bottom-left of the portal structure
+  map[arenaHeight-1][width-6] = 'E';
 
   return map.map(r => r.join(''));
 };

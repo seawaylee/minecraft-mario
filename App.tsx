@@ -40,7 +40,7 @@ const MobileControls = () => {
   // Button Components
   const DPadBtn = ({ code, icon: Icon, className }: any) => (
     <button
-        className={`w-12 h-12 md:w-16 md:h-16 bg-gray-800/80 rounded-lg border-2 border-gray-600 active:bg-gray-600 active:border-gray-400 flex items-center justify-center text-white transition-colors ${className}`}
+        className={`w-14 h-14 md:w-16 md:h-16 bg-gray-800/80 rounded-lg border-2 border-gray-600 active:bg-gray-600 active:border-gray-400 flex items-center justify-center text-white transition-colors ${className}`}
         onTouchStart={(e) => handleTouch(code, e)}
         onTouchEnd={(e) => handleEnd(code, e)}
         onMouseDown={(e) => handleTouch(code, e)}
@@ -48,13 +48,13 @@ const MobileControls = () => {
         onMouseLeave={(e) => handleEnd(code, e)}
         style={{ touchAction: 'none' }}
     >
-        <Icon size={24} className="md:w-8 md:h-8" />
+        <Icon size={28} className="md:w-8 md:h-8" />
     </button>
   );
 
   const ActionBtn = ({ code, label, color, icon: Icon, className }: any) => (
       <button
-        className={`w-14 h-14 md:w-20 md:h-20 rounded-full border-4 border-black/30 shadow-xl active:scale-95 active:brightness-110 transition-all flex items-center justify-center text-white font-bold ${className}`}
+        className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-black/30 shadow-xl active:scale-95 active:brightness-110 transition-all flex flex-col items-center justify-center text-white font-bold ${className}`}
         style={{ backgroundColor: color, touchAction: 'none' }}
         onTouchStart={(e) => handleTouch(code, e)}
         onTouchEnd={(e) => handleEnd(code, e)}
@@ -62,15 +62,16 @@ const MobileControls = () => {
         onMouseUp={(e) => handleEnd(code, e)}
         onMouseLeave={(e) => handleEnd(code, e)}
       >
-          {Icon ? <Icon size={24} className="md:w-8 md:h-8" strokeWidth={2.5} /> : label}
+          {Icon && <Icon size={24} className="md:w-8 md:h-8 mb-1" strokeWidth={2.5} />}
+          <span className="text-[10px] md:text-xs leading-none">{label}</span>
       </button>
   );
 
   return (
-    <div className="absolute inset-0 z-50 pointer-events-none flex flex-col justify-end pb-4 px-4 md:pb-6 md:px-6 select-none touch-none">
+    <div className="absolute inset-0 z-50 pointer-events-none flex flex-col justify-end pb-4 px-6 md:pb-6 md:px-10 select-none touch-none">
         <div className="flex justify-between items-end w-full pointer-events-auto">
             {/* D-Pad */}
-            <div className="relative w-36 h-36 md:w-48 md:h-48">
+            <div className="relative w-40 h-40 md:w-48 md:h-48 mb-2">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2">
                      <DPadBtn code="ArrowUp" icon={ArrowUp} />
                 </div>
@@ -85,19 +86,23 @@ const MobileControls = () => {
                 </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="relative w-36 h-36 md:w-48 md:h-48">
-                <div className="absolute bottom-0 right-1/2 translate-x-1/2">
-                    <ActionBtn code="Space" icon={ArrowUp} color="#22c55e" className="scale-110" />
+            {/* Action Buttons - Spaced out better */}
+            <div className="relative w-48 h-48 md:w-56 md:h-56">
+                {/* Jump (Space) - Bottom Right */}
+                <div className="absolute bottom-0 right-0">
+                    <ActionBtn code="Space" icon={ArrowUp} label="跳跃" color="#22c55e" className="scale-110" />
                 </div>
-                <div className="absolute bottom-2 md:bottom-4 right-0">
-                    <ActionBtn code="KeyJ" icon={Target} color="#ef4444" className="w-12 h-12 md:w-16 md:h-16" />
+                {/* Attack (J) - Left of Jump */}
+                <div className="absolute bottom-0 right-[80px] md:right-[100px]">
+                    <ActionBtn code="KeyJ" icon={Target} label="攻击" color="#ef4444" className="" />
                 </div>
-                 <div className="absolute top-0 right-0">
-                    <ActionBtn code="KeyK" icon={Pickaxe} color="#eab308" className="w-10 h-10 md:w-14 md:h-14" />
+                {/* Dig (K) - Above Jump */}
+                 <div className="absolute bottom-[80px] md:bottom-[100px] right-0">
+                    <ActionBtn code="KeyK" icon={Pickaxe} label="挖掘" color="#eab308" className="w-14 h-14 md:w-16 md:h-16" />
                 </div>
+                {/* Fly (F) - Top Left of cluster */}
                 <div className="absolute top-0 left-0">
-                     <ActionBtn code="KeyF" icon={Feather} color="#a855f7" className="w-10 h-10 md:w-14 md:h-14" />
+                     <ActionBtn code="KeyF" icon={Feather} label="飞行" color="#a855f7" className="w-14 h-14 md:w-16 md:h-16" />
                 </div>
             </div>
         </div>

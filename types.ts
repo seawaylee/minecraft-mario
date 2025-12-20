@@ -45,6 +45,7 @@ export interface Entity {
   dead?: boolean;
   lifeTime?: number; // For particles
   color?: string; // For particles
+  projectileType?: 'ARROW' | 'FIREBALL' | 'TNT' | 'PEARL' | 'BONE' | 'POTION' | 'SKULL'; // For weapon customization
 }
 
 export interface Block {
@@ -62,6 +63,7 @@ export interface LevelData {
   spawnX: number;
   spawnY: number;
   biome: BiomeType;
+  mapWidth?: number; // Added to track boundaries
 }
 
 export interface GameContextType {

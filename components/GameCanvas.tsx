@@ -37,7 +37,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
     attackCooldown: 0, isAttacking: false
   });
   
-  const level = useRef<LevelData>({ blocks: [], enemies: [], items: [], projectiles: [], spawnX: 50, spawnY: 100, biome: 'PLAINS' });
+  const level = useRef<LevelData>({ blocks: [], enemies: [], items: [], projectiles: [], spawnX: 50, spawnY: 100, biome: 'PLAINS', mapWidth: 0 });
   const camera = useRef({ x: 0 });
   const particles = useRef<Entity[]>([]);
   const [bossActive, setBossActive] = useState(false);
@@ -63,13 +63,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
 
         if (char === 'G') parsedBlocks.push({ x: wx, y: wy, type: 'GRASS', solid: true });
         else if (char === 'D') parsedBlocks.push({ x: wx, y: wy, type: 'DIRT', solid: true });
-        else if (char === 'S') parsedBlocks.push({ x: wx, y: wy, type: 'SAND', solid: true }); // Sand
-        else if (char === 'A') parsedBlocks.push({ x: wx, y: wy, type: 'SANDSTONE', solid: true }); // Sandstone
-        else if (char === 'W') parsedBlocks.push({ x: wx, y: wy, type: 'SNOW', solid: true }); // Snow
-        else if (char === 'I') parsedBlocks.push({ x: wx, y: wy, type: 'ICE', solid: true }); // Ice
-        else if (char === 'R') parsedBlocks.push({ x: wx, y: wy, type: 'NETHERRACK', solid: true }); // Netherrack
-        else if (char === 'X') parsedBlocks.push({ x: wx, y: wy, type: 'END_STONE', solid: true }); // End Stone
-        else if (char === 'O') parsedBlocks.push({ x: wx, y: wy, type: 'OBSIDIAN', solid: true }); // Obsidian
+        else if (char === 'S') parsedBlocks.push({ x: wx, y: wy, type: 'SAND', solid: true }); 
+        else if (char === 'A') parsedBlocks.push({ x: wx, y: wy, type: 'SANDSTONE', solid: true }); 
+        else if (char === 'W') parsedBlocks.push({ x: wx, y: wy, type: 'SNOW', solid: true }); 
+        else if (char === 'I') parsedBlocks.push({ x: wx, y: wy, type: 'ICE', solid: true }); 
+        else if (char === 'R') parsedBlocks.push({ x: wx, y: wy, type: 'NETHERRACK', solid: true }); 
+        else if (char === 'X') parsedBlocks.push({ x: wx, y: wy, type: 'END_STONE', solid: true }); 
+        else if (char === 'O') parsedBlocks.push({ x: wx, y: wy, type: 'OBSIDIAN', solid: true }); 
         else if (char === '#') parsedBlocks.push({ x: wx, y: wy, type: 'BEDROCK', solid: true });
         else if (char === 'L') parsedBlocks.push({ x: wx, y: wy, type: 'LAVA', solid: false });
         else if (char === '?') parsedBlocks.push({ x: wx, y: wy, type: 'STONE', solid: true });
@@ -92,7 +92,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
       }
     });
 
-    level.current = { blocks: parsedBlocks, enemies: parsedEnemies, items: parsedItems, projectiles: [], spawnX: startX, spawnY: startY, biome };
+    level.current = { blocks: parsedBlocks, enemies: parsedEnemies, items: parsedItems, projectiles: [], spawnX: startX, spawnY: startY, biome, mapWidth };
     player.current = { 
         x: startX, y: startY, vx: 0, vy: 0, width: 24, height: 30, 
         isGrounded: false, isDead: false, facingRight: true,
@@ -137,10 +137,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
                      offCtx.fillStyle = '#cf222e';
                      offCtx.fillRect(b.x, b.y + 4, TILE_SIZE, TILE_SIZE - 4);
                      break;
-                 case 'PORTAL':
-                     offCtx.fillStyle = '#000';
-                     offCtx.fillRect(b.x, b.y, TILE_SIZE, TILE_SIZE * 3); 
-                     break;
+                 // Don't draw PORTAL here, draw it dynamically in draw() to animate
              }
         });
       }
@@ -213,8 +210,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
     }
 
     p.x += p.vx;
+    // World Boundary Check (Left/Right)
+    if (p.x < 0) { p.x = 0; p.vx = 0; }
+    if (level.current.mapWidth && p.x > level.current.mapWidth - p.width) {
+         p.x = level.current.mapWidth - p.width;
+         p.vx = 0;
+    }
+
     checkCollision(p, 'x');
     p.y += p.vy;
+    
+    // World Boundary Check (Top)
+    if (p.y < -100) { p.y = -100; p.vy = 0; } // Allow slight jump over but not infinite
+    
     checkCollision(p, 'y');
 
     updateEntities();
@@ -222,6 +230,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
     const targetCamX = p.x - CANVAS_WIDTH / 3;
     camera.current.x += (targetCamX - camera.current.x) * 0.1;
     if (camera.current.x < 0) camera.current.x = 0;
+    if (level.current.mapWidth && camera.current.x > level.current.mapWidth - CANVAS_WIDTH) {
+        camera.current.x = level.current.mapWidth - CANVAS_WIDTH;
+    }
 
     // Death check (Void)
     if (p.y > CANVAS_HEIGHT + 100) {
@@ -235,18 +246,38 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
   const fireProjectile = (p: PlayerState) => {
       p.isAttacking = true;
       audioController.playSFX('JUMP'); 
+      
+      const charData = CHARACTERS.find(c => c.id === character) || CHARACTERS[0];
+      const pType = (charData.projectileType || 'ARROW') as Entity['projectileType'];
+
       const bullet: Entity = {
           id: `bullet_${Date.now()}_${Math.random()}`,
           type: 'PROJECTILE',
           x: p.facingRight ? p.x + p.width : p.x,
-          y: p.y + p.height / 2,
+          y: p.y + p.height / 2 - 4,
           width: 8,
           height: 8,
           vx: p.facingRight ? PROJECTILE_SPEED : -PROJECTILE_SPEED,
           vy: 0,
           hp: 1,
-          maxHp: 1
+          maxHp: 1,
+          projectileType: pType 
       };
+
+      // Customize Projectile behavior based on type
+      if (pType === 'FIREBALL') {
+          bullet.width = 12;
+          bullet.height = 12;
+          bullet.color = '#FFA500';
+      } else if (pType === 'TNT') {
+          bullet.vx = p.facingRight ? 6 : -6;
+          bullet.vy = -4; // Arcs
+          bullet.width = 12;
+          bullet.height = 12;
+      } else if (pType === 'PEARL') {
+          bullet.color = '#10B981';
+      }
+
       if (!level.current.projectiles) level.current.projectiles = [];
       level.current.projectiles.push(bullet);
       setTimeout(() => { p.isAttacking = false; }, 100);
@@ -280,7 +311,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
 
   const checkCollision = (p: PlayerState | Entity, axis: 'x' | 'y') => {
     const isPlayer = (p as any).isGrounded !== undefined;
-    if (p.x < 0) p.x = 0;
+    // if (p.x < 0) p.x = 0; // Handled in update now
     const checkRadius = 150;
     let collided = false;
 
@@ -292,13 +323,16 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
              if (!isFlying.current) die(); 
              return;
           }
-          if (block.type === 'PORTAL' && rectIntersect(p.x, p.y, p.width, p.height, block.x, block.y, TILE_SIZE, TILE_SIZE)) {
-              const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
-              if (boss) return; 
-              audioController.playSFX('WIN');
-              onWin(score);
-              (p as PlayerState).isDead = true; 
-              return;
+          if (block.type === 'PORTAL') {
+              // Expanded portal collision area (3x4 size based on draw logic)
+              if (rectIntersect(p.x, p.y, p.width, p.height, block.x, block.y - TILE_SIZE * 3, TILE_SIZE * 3, TILE_SIZE * 4)) {
+                  const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
+                  if (boss) return; 
+                  audioController.playSFX('WIN');
+                  onWin(score);
+                  (p as PlayerState).isDead = true; 
+                  return;
+              }
           }
       }
 
@@ -351,7 +385,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
                 }
             });
 
-            if (target) {
+            // Specific logic: TNT arcs
+            if (proj.projectileType === 'TNT') {
+                proj.vy += GRAVITY * 0.5; // Gravity affects TNT
+            } else if (target) {
+                // Homing for basic and some others
                 const t = target as Entity;
                 const dx = (t.x + t.width/2) - proj.x;
                 const dy = (t.y + t.height/2) - proj.y;
@@ -367,6 +405,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
                 if (rectIntersect(proj.x, proj.y, proj.width, proj.height, e.x, e.y, e.width, e.height)) {
                     proj.dead = true;
                     e.hp--;
+                    // Explosion effect for TNT
+                    if (proj.projectileType === 'TNT') spawnParticles(proj.x, proj.y, '#FFF', 20);
+                    
                     spawnParticles(e.x + e.width/2, e.y + e.height/2, '#ff0000', 3);
                     if (e.hp <= 0) {
                         e.dead = true;
@@ -420,6 +461,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
           }
           e.vx *= FRICTION;
           e.x += e.vx;
+          
+          // Boundary check for enemies
+          if (e.x < 0) { e.x = 0; e.vx *= -1; }
+          if (level.current.mapWidth && e.x > level.current.mapWidth - e.width) {
+              e.x = level.current.mapWidth - e.width; e.vx *= -1;
+          }
+
           checkCollision(e, 'x');
           e.y += e.vy;
           checkCollision(e, 'y');
@@ -484,8 +532,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
         case 'PLAINS': ctx.fillStyle = '#87CEEB'; break;
         case 'DESERT': ctx.fillStyle = '#F0E68C'; break;
         case 'SNOW': ctx.fillStyle = '#E0F7FA'; break;
-        case 'NETHER': ctx.fillStyle = '#3B0000'; break; // Dark Red
-        case 'THE_END': ctx.fillStyle = '#14001A'; break; // Dark Void
+        case 'NETHER': ctx.fillStyle = '#3B0000'; break; 
+        case 'THE_END': ctx.fillStyle = '#14001A'; break; 
         default: ctx.fillStyle = '#87CEEB';
     }
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
@@ -501,30 +549,113 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
         ctx.drawImage(staticLevelCanvas.current, sx, sy, sw, sh, sx, sy, sw, sh);
     }
 
-    // Draw Portals
+    // Draw Portals (Custom End Portal Rendering)
     level.current.blocks.forEach(b => {
         if (b.type === 'PORTAL') {
              const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
+             
+             // Draw Portal Frame (End Stone Style)
+             const portalWidth = TILE_SIZE * 3;
+             const portalHeight = TILE_SIZE * 4;
+             // b.x, b.y is bottom-left marker. Draw upwards and right.
+             const startX = b.x;
+             const startY = b.y - TILE_SIZE * 3; 
+
+             // Inner Void (The Portal itself)
              if (!boss) {
+                 ctx.fillStyle = '#110011'; // Void black
+                 ctx.fillRect(startX + 4, startY + 4, portalWidth - 8, portalHeight - 4);
+                 
+                 // Stars/Sparkles
                  if (Math.random() > 0.5) {
-                     ctx.fillStyle = '#d946ef';
-                     ctx.fillRect(b.x + Math.random()*TILE_SIZE, b.y + Math.random()*TILE_SIZE*3, 4, 4);
+                     ctx.fillStyle = '#d946ef'; // Purple particles
+                     ctx.fillRect(startX + 10 + Math.random()*(portalWidth-20), startY + 10 + Math.random()*(portalHeight-20), 4, 4);
+                     ctx.fillStyle = '#ffffff'; // White stars
+                     ctx.fillRect(startX + 10 + Math.random()*(portalWidth-20), startY + 10 + Math.random()*(portalHeight-20), 2, 2);
                  }
-                 ctx.fillStyle = 'rgba(217, 70, 239, 0.5)'; 
              } else {
-                 ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                 // Inactive Portal (Obsidian fill)
+                 ctx.fillStyle = '#1a1a1a';
+                 ctx.fillRect(startX + 4, startY + 4, portalWidth - 8, portalHeight - 4);
              }
-             ctx.fillRect(b.x + 4, b.y + 4, TILE_SIZE - 8, TILE_SIZE * 3 - 8);
+
+             // Frame
+             ctx.fillStyle = '#DFE0A8'; // End Stone color
+             // Left Pillar
+             ctx.fillRect(startX, startY, 8, portalHeight);
+             // Right Pillar
+             ctx.fillRect(startX + portalWidth - 8, startY, 8, portalHeight);
+             // Top Bar
+             ctx.fillRect(startX, startY, portalWidth, 8);
+             
+             // Eyes of Ender (if active)
+             if (!boss) {
+                 ctx.fillStyle = '#10B981';
+                 ctx.fillRect(startX + 2, startY + 2, 4, 4);
+                 ctx.fillRect(startX + portalWidth - 6, startY + 2, 4, 4);
+             }
         }
     });
 
-    // Projectiles
+    // Projectiles with Custom Styles
     if (level.current.projectiles) {
-        ctx.fillStyle = '#FFFF00'; 
         level.current.projectiles.forEach(proj => {
-            ctx.beginPath();
-            ctx.arc(proj.x + proj.width/2, proj.y + proj.height/2, 4, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.save();
+            ctx.translate(proj.x + proj.width/2, proj.y + proj.height/2);
+            
+            if (proj.projectileType === 'ARROW') {
+                ctx.rotate(Math.atan2(proj.vy, proj.vx));
+                ctx.fillStyle = '#5c4033'; // Wood shaft
+                ctx.fillRect(-6, -1, 12, 2);
+                ctx.fillStyle = '#ccc'; // Feather
+                ctx.fillRect(-6, -3, 3, 6);
+                ctx.fillStyle = '#999'; // Tip
+                ctx.fillRect(6, -2, 2, 4);
+            } else if (proj.projectileType === 'TNT') {
+                ctx.fillStyle = '#ef4444'; // Red
+                ctx.fillRect(-6, -6, 12, 12);
+                ctx.fillStyle = '#fff'; // White band
+                ctx.fillRect(-6, -2, 12, 4);
+                ctx.fillStyle = '#000'; 
+                ctx.font = '8px monospace';
+                ctx.fillText("TNT", -6, 2);
+            } else if (proj.projectileType === 'FIREBALL') {
+                ctx.fillStyle = '#f97316'; // Orange
+                ctx.beginPath();
+                ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fbbf24'; // Yellow core
+                ctx.beginPath();
+                ctx.arc(0, 0, 3, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (proj.projectileType === 'PEARL') {
+                ctx.fillStyle = '#10B981'; // Ender Green
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#065F46';
+                ctx.stroke();
+            } else if (proj.projectileType === 'POTION') {
+                ctx.fillStyle = '#ec4899'; // Pink potion
+                ctx.beginPath();
+                ctx.arc(0, 2, 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#fff'; // Neck
+                ctx.fillRect(-1, -4, 2, 3);
+            } else if (proj.projectileType === 'BONE') {
+                ctx.fillStyle = '#fff';
+                ctx.rotate(Date.now() / 100); // Spin
+                ctx.fillRect(-4, -1, 8, 2);
+                ctx.fillRect(-5, -2, 2, 4);
+                ctx.fillRect(3, -2, 2, 4);
+            } else {
+                 // Default Ball
+                ctx.fillStyle = '#FFFF00'; 
+                ctx.beginPath();
+                ctx.arc(0, 0, 4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.restore();
         });
     }
 
