@@ -1,9 +1,18 @@
 export type ScreenState = 'MENU' | 'CHARACTER_SELECT' | 'GAME' | 'GAME_OVER' | 'WIN' | 'GENERATING_LEVEL';
+export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type BiomeType = 'PLAINS' | 'DESERT' | 'SNOW' | 'NETHER' | 'THE_END';
 
 export enum CharacterType {
   STEVE = 'Steve',
   ALEX = 'Alex',
-  ZOMBIE = 'Zombie'
+  ZOMBIE = 'Zombie',
+  SKELETON = 'Skeleton',
+  CREEPER = 'Creeper',
+  ENDERMAN = 'Enderman',
+  VILLAGER = 'Villager',
+  PIGMAN = 'Pigman',
+  HEROBRINE = 'Herobrine',
+  BLAZE = 'Blaze'
 }
 
 export interface PlayerState {
@@ -24,7 +33,7 @@ export interface PlayerState {
 
 export interface Entity {
   id: string;
-  type: 'ENEMY_CREEPER' | 'ENEMY_SPIDER' | 'ENEMY_GHAST' | 'ENEMY_ENDERMAN' | 'ENEMY_BOSS' | 'ITEM_DIAMOND' | 'PARTICLE' | 'PROJECTILE';
+  type: 'ENEMY_CREEPER' | 'ENEMY_ZOMBIE' | 'ENEMY_GHAST' | 'ENEMY_ENDERMAN' | 'ENEMY_BOSS' | 'ITEM_DIAMOND' | 'PARTICLE' | 'PROJECTILE';
   x: number;
   y: number;
   width: number;
@@ -41,7 +50,7 @@ export interface Entity {
 export interface Block {
   x: number;
   y: number;
-  type: 'DIRT' | 'GRASS' | 'STONE' | 'BEDROCK' | 'LAVA' | 'PORTAL';
+  type: 'DIRT' | 'GRASS' | 'STONE' | 'BEDROCK' | 'LAVA' | 'PORTAL' | 'SAND' | 'SANDSTONE' | 'SNOW' | 'ICE' | 'NETHERRACK' | 'END_STONE' | 'OBSIDIAN';
   solid: boolean;
 }
 
@@ -52,6 +61,7 @@ export interface LevelData {
   projectiles: Entity[];
   spawnX: number;
   spawnY: number;
+  biome: BiomeType;
 }
 
 export interface GameContextType {

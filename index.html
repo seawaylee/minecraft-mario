@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <title>Mine-Mario World</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -12,6 +12,9 @@
         font-family: 'VT323', monospace;
         image-rendering: pixelated;
         user-select: none;
+        -webkit-user-select: none;
+        touch-action: none;
+        overscroll-behavior: none;
       }
       
       /* Minecraft-style button pressed effect */
@@ -33,7 +36,7 @@
 </script>
 <link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-gray-900 text-white overflow-hidden">
+  <body class="bg-gray-900 text-white overflow-hidden fixed inset-0">
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>
