@@ -12,7 +12,28 @@ export enum CharacterType {
   VILLAGER = 'Villager',
   PIGMAN = 'Pigman',
   HEROBRINE = 'Herobrine',
-  BLAZE = 'Blaze'
+  BLAZE = 'Blaze',
+  // New Characters
+  DREAM = 'Dream',
+  TECHNO = 'Technoblade',
+  NOTCH = 'Notch',
+  DINNERBONE = 'Dinnerbone',
+  WITCH = 'Witch',
+  PILLAGER = 'Pillager',
+  DROWNED = 'Drowned',
+  WITHER_SKELETON = 'WitherSkeleton',
+  SLIME = 'Slime',
+  SPIDER = 'Spider',
+  IRON_GOLEM = 'IronGolem',
+  SNOW_GOLEM = 'SnowGolem',
+  WARDEN = 'Warden',
+  PHANTOM = 'Phantom',
+  ALLAY = 'Allay',
+  VEX = 'Vex',
+  BEE = 'Bee',
+  COW = 'Cow',
+  PIG = 'Pig',
+  SHEEP = 'Sheep'
 }
 
 export interface PlayerState {
@@ -31,9 +52,20 @@ export interface PlayerState {
   maxHealth: number;
 }
 
+export type EnemyType = 
+  | 'ENEMY_CREEPER' | 'ENEMY_ZOMBIE' | 'ENEMY_SKELETON' | 'ENEMY_SPIDER' | 'ENEMY_SLIME' 
+  | 'ENEMY_ENDERMAN' | 'ENEMY_WITCH' | 'ENEMY_PILLAGER' 
+  | 'ENEMY_GHAST' | 'ENEMY_BLAZE' | 'ENEMY_WITHER_SKELETON' | 'ENEMY_PIGMAN'
+  | 'ENEMY_PHANTOM' | 'ENEMY_DROWNED' | 'ENEMY_WARDEN' 
+  | 'ENEMY_BOSS';
+
+export type ProjectileStyle = 
+  | 'ARROW' | 'FIREBALL' | 'TNT' | 'PEARL' | 'BONE' | 'POTION' | 'SKULL' 
+  | 'TRIDENT' | 'SNOWBALL' | 'SONIC_BOOM' | 'EGG' | 'DRAGON_BREATH' | 'EXPERIENCE';
+
 export interface Entity {
   id: string;
-  type: 'ENEMY_CREEPER' | 'ENEMY_ZOMBIE' | 'ENEMY_GHAST' | 'ENEMY_ENDERMAN' | 'ENEMY_BOSS' | 'ITEM_DIAMOND' | 'PARTICLE' | 'PROJECTILE';
+  type: EnemyType | 'ITEM_DIAMOND' | 'PARTICLE' | 'PROJECTILE';
   x: number;
   y: number;
   width: number;
@@ -45,13 +77,14 @@ export interface Entity {
   dead?: boolean;
   lifeTime?: number; // For particles
   color?: string; // For particles
-  projectileType?: 'ARROW' | 'FIREBALL' | 'TNT' | 'PEARL' | 'BONE' | 'POTION' | 'SKULL'; // For weapon customization
+  projectileType?: ProjectileStyle; // For weapon customization
+  attackCooldown?: number; // For enemies that shoot
 }
 
 export interface Block {
   x: number;
   y: number;
-  type: 'DIRT' | 'GRASS' | 'STONE' | 'BEDROCK' | 'LAVA' | 'PORTAL' | 'SAND' | 'SANDSTONE' | 'SNOW' | 'ICE' | 'NETHERRACK' | 'END_STONE' | 'OBSIDIAN';
+  type: 'DIRT' | 'GRASS' | 'STONE' | 'BEDROCK' | 'LAVA' | 'PORTAL' | 'SAND' | 'SANDSTONE' | 'SNOW' | 'ICE' | 'NETHERRACK' | 'END_STONE' | 'OBSIDIAN' | 'WOOL';
   solid: boolean;
 }
 

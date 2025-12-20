@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Block, Entity, LevelData, PlayerState, CharacterType, Difficulty, BiomeType } from '../types';
-import { TILE_SIZE, GRAVITY, JUMP_FORCE, MOVE_SPEED, FRICTION, CANVAS_WIDTH, CANVAS_HEIGHT, CHARACTERS, PLAYER_MAX_HP, ATTACK_COOLDOWN, ATTACK_RANGE, BOSS_HP, PROJECTILE_SPEED } from '../constants';
+import React, { useEffect, useRef, useState } from 'react';
+import { Block, Entity, LevelData, PlayerState, CharacterType, Difficulty, BiomeType, EnemyType, ProjectileStyle } from '../types';
+import { TILE_SIZE, GRAVITY, JUMP_FORCE, MOVE_SPEED, FRICTION, CANVAS_WIDTH, CANVAS_HEIGHT, CHARACTERS, PLAYER_MAX_HP, ATTACK_COOLDOWN, ATTACK_RANGE, BOSS_HP, PROJECTILE_SPEED, MOBS } from '../constants';
 import { audioController } from '../utils/audio';
 
 interface GameCanvasProps {
@@ -22,13 +22,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
   const staticLevelCanvas = useRef<HTMLCanvasElement | null>(null);
   const isFlying = useRef<boolean>(false);
   
-  const getMaxHealth = () => {
-      switch(difficulty) {
-          case 'EASY': return 20; 
-          case 'HARD': return 5;  
-          default: return 10;
-      }
-  };
+  const getMaxHealth = () => difficulty === 'HARD' ? 5 : (difficulty === 'EASY' ? 20 : 10);
   
   const player = useRef<PlayerState>({
     x: 50, y: 100, vx: 0, vy: 0, width: 24, height: 30, 
@@ -43,14 +37,72 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
   const [bossActive, setBossActive] = useState(false);
   const [flyingModeUI, setFlyingModeUI] = useState(false);
 
-  // Initialize
+  // --- SPAWNING LOGIC ---
+  const getEnemyByMarker = (marker: string, biome: BiomeType): Entity | null => {
+      // g: Ground Common, s: Shooter/Special, t: Tank/Rare, f: Flying
+      let type: EnemyType = 'ENEMY_ZOMBIE';
+      
+      if (biome === 'NETHER') {
+          if (marker === 'f') type = Math.random() > 0.5 ? 'ENEMY_GHAST' : 'ENEMY_BLAZE';
+          else if (marker === 's') type = 'ENEMY_WITHER_SKELETON';
+          else if (marker === 't') type = 'ENEMY_PIGMAN'; // Tanky-ish
+          else type = Math.random() > 0.5 ? 'ENEMY_PIGMAN' : 'ENEMY_WITHER_SKELETON';
+      } else if (biome === 'THE_END') {
+          if (marker === 'f') type = 'ENEMY_PHANTOM';
+          else type = 'ENEMY_ENDERMAN';
+      } else if (biome === 'DESERT') {
+          if (marker === 'f') type = 'ENEMY_PHANTOM';
+          else if (marker === 's') type = 'ENEMY_SKELETON'; // Husk? (Just skeleton for now)
+          else if (marker === 't') type = 'ENEMY_PILLAGER';
+          else type = 'ENEMY_ZOMBIE'; // Husk
+      } else if (biome === 'SNOW') {
+          if (marker === 'f') type = 'ENEMY_PHANTOM';
+          else if (marker === 's') type = 'ENEMY_WITCH'; // Stray?
+          else if (marker === 't') type = 'ENEMY_WARDEN'; // Rare spawn in ice caves?
+          else type = 'ENEMY_ZOMBIE';
+      } else {
+          // PLAINS
+          if (marker === 'f') type = 'ENEMY_PHANTOM';
+          else if (marker === 's') type = Math.random() > 0.5 ? 'ENEMY_SKELETON' : 'ENEMY_WITCH';
+          else if (marker === 't') type = Math.random() > 0.5 ? 'ENEMY_SLIME' : 'ENEMY_CREEPER';
+          else {
+              const r = Math.random();
+              if (r < 0.3) type = 'ENEMY_ZOMBIE';
+              else if (r < 0.6) type = 'ENEMY_SPIDER';
+              else if (r < 0.8) type = 'ENEMY_PILLAGER';
+              else type = 'ENEMY_DROWNED';
+          }
+      }
+
+      // Specific overrides from old map generation if specific chars were used
+      if (marker === 'C') type = 'ENEMY_CREEPER';
+      if (marker === 'Z') type = 'ENEMY_ZOMBIE';
+      if (marker === 'M') type = 'ENEMY_ENDERMAN';
+      if (marker === '^') type = 'ENEMY_GHAST';
+      if (marker === 'B') type = 'ENEMY_BOSS';
+
+      const config = MOBS[type];
+      if (!config) return null;
+
+      return {
+          id: `e_${Math.random()}`,
+          type: type,
+          x: 0, y: 0, // Set by caller
+          width: config.width,
+          height: config.height,
+          vx: config.vx * (Math.random() > 0.5 ? 1 : -1),
+          vy: 0,
+          hp: config.hp,
+          maxHp: config.hp,
+          attackCooldown: 100 + Math.random() * 100
+      };
+  };
+
   useEffect(() => {
     const parsedBlocks: Block[] = [];
     const parsedEnemies: Entity[] = [];
-    const parsedItems: Entity[] = [];
     let startX = 50;
     let startY = 100;
-
     let mapWidth = 0;
     let mapHeight = levelRaw.length * TILE_SIZE;
 
@@ -61,38 +113,33 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
         const wx = x * TILE_SIZE;
         const wy = y * TILE_SIZE;
 
-        if (char === 'G') parsedBlocks.push({ x: wx, y: wy, type: 'GRASS', solid: true });
-        else if (char === 'D') parsedBlocks.push({ x: wx, y: wy, type: 'DIRT', solid: true });
-        else if (char === 'S') parsedBlocks.push({ x: wx, y: wy, type: 'SAND', solid: true }); 
-        else if (char === 'A') parsedBlocks.push({ x: wx, y: wy, type: 'SANDSTONE', solid: true }); 
-        else if (char === 'W') parsedBlocks.push({ x: wx, y: wy, type: 'SNOW', solid: true }); 
-        else if (char === 'I') parsedBlocks.push({ x: wx, y: wy, type: 'ICE', solid: true }); 
-        else if (char === 'R') parsedBlocks.push({ x: wx, y: wy, type: 'NETHERRACK', solid: true }); 
-        else if (char === 'X') parsedBlocks.push({ x: wx, y: wy, type: 'END_STONE', solid: true }); 
-        else if (char === 'O') parsedBlocks.push({ x: wx, y: wy, type: 'OBSIDIAN', solid: true }); 
-        else if (char === '#') parsedBlocks.push({ x: wx, y: wy, type: 'BEDROCK', solid: true });
-        else if (char === 'L') parsedBlocks.push({ x: wx, y: wy, type: 'LAVA', solid: false });
-        else if (char === '?') parsedBlocks.push({ x: wx, y: wy, type: 'STONE', solid: true });
-        else if (char === 'E') parsedBlocks.push({ x: wx, y: wy, type: 'PORTAL', solid: false });
-        else if (char === 'C') {
-            parsedEnemies.push({ id: `e_${x}_${y}`, type: 'ENEMY_CREEPER', x: wx, y: wy, width: 24, height: 24, vx: -0.5, vy: 0, hp: 3, maxHp: 3 });
-        }
-        else if (char === 'Z') {
-            parsedEnemies.push({ id: `e_${x}_${y}`, type: 'ENEMY_ZOMBIE', x: wx, y: wy, width: 24, height: 30, vx: -0.8, vy: 0, hp: 5, maxHp: 5 });
-        }
-        else if (char === 'M') {
-            parsedEnemies.push({ id: `e_${x}_${y}`, type: 'ENEMY_ENDERMAN', x: wx, y: wy, width: 24, height: 60, vx: 0, vy: 0, hp: 10, maxHp: 10 });
-        }
-        else if (char === '^') {
-            parsedEnemies.push({ id: `e_${x}_${y}`, type: 'ENEMY_GHAST', x: wx, y: wy, width: 48, height: 48, vx: 0, vy: 0, hp: 8, maxHp: 8 });
-        }
-        else if (char === 'B') {
-             parsedEnemies.push({ id: `e_${x}_${y}`, type: 'ENEMY_BOSS', x: wx, y: wy, width: 100, height: 60, vx: 0, vy: 0, hp: BOSS_HP, maxHp: BOSS_HP });
+        if (['G','D','S','A','W','I','R','X','O','#','L','?','E'].includes(char)) {
+             let type: any = 'DIRT';
+             if (char === 'G') type = 'GRASS';
+             else if (char === 'S') type = 'SAND';
+             else if (char === 'A') type = 'SANDSTONE';
+             else if (char === 'W') type = 'SNOW';
+             else if (char === 'I') type = 'ICE';
+             else if (char === 'R') type = 'NETHERRACK';
+             else if (char === 'X') type = 'END_STONE';
+             else if (char === 'O') type = 'OBSIDIAN';
+             else if (char === '#') type = 'BEDROCK';
+             else if (char === 'L') type = 'LAVA';
+             else if (char === '?') type = 'STONE';
+             else if (char === 'E') type = 'PORTAL';
+             parsedBlocks.push({ x: wx, y: wy, type, solid: type !== 'LAVA' && type !== 'PORTAL' });
+        } else if (['g', 's', 't', 'f', 'C', 'Z', 'M', '^', 'B'].includes(char)) {
+             const enemy = getEnemyByMarker(char, biome);
+             if (enemy) {
+                 enemy.x = wx;
+                 enemy.y = wy;
+                 parsedEnemies.push(enemy);
+             }
         }
       }
     });
 
-    level.current = { blocks: parsedBlocks, enemies: parsedEnemies, items: parsedItems, projectiles: [], spawnX: startX, spawnY: startY, biome, mapWidth };
+    level.current = { blocks: parsedBlocks, enemies: parsedEnemies, items: [], projectiles: [], spawnX: startX, spawnY: startY, biome, mapWidth };
     player.current = { 
         x: startX, y: startY, vx: 0, vy: 0, width: 24, height: 30, 
         isGrounded: false, isDead: false, facingRight: true,
@@ -102,15 +149,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
     particles.current = [];
     camera.current.x = 0;
     setBossActive(false);
-    isFlying.current = false;
-    setFlyingModeUI(false);
-
     renderStaticLevel(mapWidth, mapHeight);
-
     requestRef.current = requestAnimationFrame(update);
-    return () => {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-    };
+    return () => { if (requestRef.current) cancelAnimationFrame(requestRef.current); };
   }, [levelRaw, difficulty, biome]);
 
   const renderStaticLevel = (w: number, h: number) => {
@@ -118,182 +159,145 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
       offscreen.width = w + 100;
       offscreen.height = h + 100;
       const offCtx = offscreen.getContext('2d');
-      if (offCtx) {
-          offCtx.clearRect(0, 0, offscreen.width, offscreen.height);
-          level.current.blocks.forEach(b => {
-             switch(b.type) {
-                 case 'GRASS': drawBlock(offCtx, b.x, b.y, '#5c4033', '#4ade80'); break;
-                 case 'DIRT': drawBlock(offCtx, b.x, b.y, '#5c4033'); break;
-                 case 'STONE': drawBlock(offCtx, b.x, b.y, '#78716c'); break;
-                 case 'SAND': drawBlock(offCtx, b.x, b.y, '#F6D7B0'); break;
-                 case 'SANDSTONE': drawBlock(offCtx, b.x, b.y, '#E6C288', '#D8B375'); break;
-                 case 'SNOW': drawBlock(offCtx, b.x, b.y, '#FFFFFF', '#E0F7FA'); break;
-                 case 'ICE': drawBlock(offCtx, b.x, b.y, '#A5F2F3', undefined, true); break;
-                 case 'NETHERRACK': drawBlock(offCtx, b.x, b.y, '#6F3637', '#502020'); break;
-                 case 'END_STONE': drawBlock(offCtx, b.x, b.y, '#DFE0A8', '#F0F1B8'); break;
-                 case 'OBSIDIAN': drawBlock(offCtx, b.x, b.y, '#141019', '#2E203C'); break;
-                 case 'BEDROCK': drawBlock(offCtx, b.x, b.y, '#292524'); break;
-                 case 'LAVA': 
-                     offCtx.fillStyle = '#cf222e';
-                     offCtx.fillRect(b.x, b.y + 4, TILE_SIZE, TILE_SIZE - 4);
-                     break;
-                 // Don't draw PORTAL here, draw it dynamically in draw() to animate
+      if (!offCtx) return;
+      
+      offCtx.clearRect(0, 0, w, h);
+      level.current.blocks.forEach(b => {
+             const color = b.type === 'GRASS' ? '#4ade80' : b.type === 'DIRT' ? '#5c4033' : b.type === 'STONE' ? '#78716c' :
+                           b.type === 'SAND' ? '#F6D7B0' : b.type === 'SANDSTONE' ? '#E6C288' : b.type === 'SNOW' ? '#FFFFFF' :
+                           b.type === 'ICE' ? '#A5F2F3' : b.type === 'NETHERRACK' ? '#6F3637' : b.type === 'END_STONE' ? '#DFE0A8' :
+                           b.type === 'OBSIDIAN' ? '#141019' : b.type === 'BEDROCK' ? '#292524' : '#5c4033';
+             
+             if (b.type === 'LAVA') {
+                 offCtx.fillStyle = '#cf222e';
+                 offCtx.fillRect(b.x, b.y + 4, TILE_SIZE, TILE_SIZE - 4);
+             } else if (b.type !== 'PORTAL') {
+                 drawBlock(offCtx, b.x, b.y, color, b.type === 'GRASS' ? '#5c4033' : undefined, b.type === 'ICE');
              }
-        });
-      }
+      });
       staticLevelCanvas.current = offscreen;
   };
 
+  // --- CONTROLS ---
   useEffect(() => {
     const handleDown = (e: KeyboardEvent) => { 
         keys.current[e.code] = true; 
-        if (e.code === 'KeyF') {
-            isFlying.current = !isFlying.current;
-            setFlyingModeUI(isFlying.current);
-            if (isFlying.current) {
-                player.current.vy = 0; 
-                audioController.playSFX('COIN'); 
-            }
-        }
+        if (e.code === 'KeyF') { isFlying.current = !isFlying.current; setFlyingModeUI(isFlying.current); if(isFlying.current) player.current.vy = 0; }
     };
     const handleUp = (e: KeyboardEvent) => { keys.current[e.code] = false; };
     window.addEventListener('keydown', handleDown);
     window.addEventListener('keyup', handleUp);
-    return () => {
-      window.removeEventListener('keydown', handleDown);
-      window.removeEventListener('keyup', handleUp);
-    };
+    return () => { window.removeEventListener('keydown', handleDown); window.removeEventListener('keyup', handleUp); };
   }, []);
 
+  // --- GAME LOOP ---
   const update = () => {
     if (player.current.isDead) return;
     const p = player.current;
-    
-    // Combat
+
+    // Actions
     if (p.attackCooldown > 0) p.attackCooldown--;
-    if (keys.current['KeyJ'] && p.attackCooldown <= 0) {
-        fireProjectile(p);
-        p.attackCooldown = ATTACK_COOLDOWN; 
-    }
-    if (keys.current['KeyK'] && p.attackCooldown <= 0) {
-        performDig(p);
-    }
+    if (keys.current['KeyJ'] && p.attackCooldown <= 0) { fireProjectile(p, character); p.attackCooldown = ATTACK_COOLDOWN; }
+    if (keys.current['KeyK'] && p.attackCooldown <= 0) performDig(p);
 
     // Movement
-    if (keys.current['ArrowLeft'] || keys.current['KeyA']) {
-      p.vx -= 0.5;
-      p.facingRight = false;
-    }
-    if (keys.current['ArrowRight'] || keys.current['KeyD']) {
-      p.vx += 0.5;
-      p.facingRight = true;
-    }
+    if (keys.current['ArrowLeft'] || keys.current['KeyA']) { p.vx -= 0.5; p.facingRight = false; }
+    if (keys.current['ArrowRight'] || keys.current['KeyD']) { p.vx += 0.5; p.facingRight = true; }
 
+    // Physics
     if (isFlying.current) {
         p.vx *= FRICTION; 
-        if (keys.current['ArrowUp'] || keys.current['KeyW'] || keys.current['Space']) {
-            p.vy = -MOVE_SPEED; 
-        } else if (keys.current['ArrowDown'] || keys.current['KeyS']) {
-            p.vy = MOVE_SPEED; 
-        } else {
-            p.vy = 0; 
-        }
+        if (keys.current['ArrowUp'] || keys.current['KeyW'] || keys.current['Space']) p.vy = -MOVE_SPEED; 
+        else if (keys.current['ArrowDown'] || keys.current['KeyS']) p.vy = MOVE_SPEED; 
+        else p.vy = 0; 
     } else {
-        if ((keys.current['ArrowUp'] || keys.current['Space'] || keys.current['KeyW']) && p.isGrounded) {
-            p.vy = JUMP_FORCE;
-            p.isGrounded = false;
-            audioController.playSFX('JUMP');
-        }
+        if ((keys.current['ArrowUp'] || keys.current['Space'] || keys.current['KeyW']) && p.isGrounded) { p.vy = JUMP_FORCE; p.isGrounded = false; audioController.playSFX('JUMP'); }
         p.vx = Math.max(Math.min(p.vx, MOVE_SPEED), -MOVE_SPEED);
         p.vx *= FRICTION;
         p.vy += GRAVITY;
     }
 
     p.x += p.vx;
-    // World Boundary Check (Left/Right)
     if (p.x < 0) { p.x = 0; p.vx = 0; }
-    if (level.current.mapWidth && p.x > level.current.mapWidth - p.width) {
-         p.x = level.current.mapWidth - p.width;
-         p.vx = 0;
-    }
-
+    if (level.current.mapWidth && p.x > level.current.mapWidth - p.width) { p.x = level.current.mapWidth - p.width; p.vx = 0; }
     checkCollision(p, 'x');
+    
     p.y += p.vy;
-    
-    // World Boundary Check (Top)
-    if (p.y < -100) { p.y = -100; p.vy = 0; } // Allow slight jump over but not infinite
-    
+    if (p.y < -100) { p.y = -100; p.vy = 0; }
     checkCollision(p, 'y');
 
     updateEntities();
 
+    // Camera
     const targetCamX = p.x - CANVAS_WIDTH / 3;
     camera.current.x += (targetCamX - camera.current.x) * 0.1;
     if (camera.current.x < 0) camera.current.x = 0;
-    if (level.current.mapWidth && camera.current.x > level.current.mapWidth - CANVAS_WIDTH) {
-        camera.current.x = level.current.mapWidth - CANVAS_WIDTH;
-    }
+    if (level.current.mapWidth && camera.current.x > level.current.mapWidth - CANVAS_WIDTH) camera.current.x = level.current.mapWidth - CANVAS_WIDTH;
 
-    // Death check (Void)
-    if (p.y > CANVAS_HEIGHT + 100) {
-      die();
-    }
+    if (p.y > CANVAS_HEIGHT + 100) die();
 
     draw();
     requestRef.current = requestAnimationFrame(update);
   };
 
-  const fireProjectile = (p: PlayerState) => {
-      p.isAttacking = true;
-      audioController.playSFX('JUMP'); 
-      
-      const charData = CHARACTERS.find(c => c.id === character) || CHARACTERS[0];
-      const pType = (charData.projectileType || 'ARROW') as Entity['projectileType'];
+  const fireProjectile = (source: Entity | PlayerState, charType?: CharacterType, projectileOverride?: ProjectileStyle) => {
+      let pType: ProjectileStyle = 'ARROW';
+      let vx = PROJECTILE_SPEED;
+      let vy = 0;
+      let facingRight = true;
 
-      const bullet: Entity = {
-          id: `bullet_${Date.now()}_${Math.random()}`,
-          type: 'PROJECTILE',
-          x: p.facingRight ? p.x + p.width : p.x,
-          y: p.y + p.height / 2 - 4,
-          width: 8,
-          height: 8,
-          vx: p.facingRight ? PROJECTILE_SPEED : -PROJECTILE_SPEED,
-          vy: 0,
-          hp: 1,
-          maxHp: 1,
-          projectileType: pType 
-      };
+      if ((source as any).facingRight !== undefined) facingRight = (source as any).facingRight;
+      else facingRight = source.vx > 0;
 
-      // Customize Projectile behavior based on type
-      if (pType === 'FIREBALL') {
-          bullet.width = 12;
-          bullet.height = 12;
-          bullet.color = '#FFA500';
-      } else if (pType === 'TNT') {
-          bullet.vx = p.facingRight ? 6 : -6;
-          bullet.vy = -4; // Arcs
-          bullet.width = 12;
-          bullet.height = 12;
-      } else if (pType === 'PEARL') {
-          bullet.color = '#10B981';
+      // Player shooting
+      if (charType) {
+          (source as PlayerState).isAttacking = true;
+          audioController.playSFX('JUMP');
+          const charData = CHARACTERS.find(c => c.id === charType);
+          if (charData && charData.projectileType) pType = charData.projectileType as ProjectileStyle;
+      } else if (projectileOverride) {
+          // Enemy shooting
+          pType = projectileOverride;
+          // Aim at player
+          const dx = player.current.x - source.x;
+          const dy = player.current.y - source.y;
+          const mag = Math.sqrt(dx*dx + dy*dy);
+          vx = (dx / mag) * (PROJECTILE_SPEED * 0.6);
+          vy = (dy / mag) * (PROJECTILE_SPEED * 0.6);
       }
 
+      if (!projectileOverride) vx = facingRight ? PROJECTILE_SPEED : -PROJECTILE_SPEED;
+
+      // Type Specific adjustments
+      if (pType === 'TNT') { vy = -5; vx *= 0.6; }
+      if (pType === 'POTION') { vy = -4; vx *= 0.7; }
+      if (pType === 'TRIDENT') { vx *= 1.2; }
+      if (pType === 'EGG') { vy = -2; }
+
+      const proj: Entity = {
+          id: `p_${Date.now()}_${Math.random()}`,
+          type: 'PROJECTILE',
+          x: facingRight ? source.x + source.width : source.x,
+          y: source.y + source.height / 2,
+          width: 8, height: 8,
+          vx, vy, hp: 1, maxHp: 1,
+          projectileType: pType,
+          color: charType ? undefined : '#FF0000' // Red bullets for enemies
+      };
+      
+      if (pType === 'SONIC_BOOM') { proj.width = 16; proj.height = 16; proj.lifeTime = 30; }
+
       if (!level.current.projectiles) level.current.projectiles = [];
-      level.current.projectiles.push(bullet);
-      setTimeout(() => { p.isAttacking = false; }, 100);
+      level.current.projectiles.push(proj);
+
+      if (charType) setTimeout(() => { (source as PlayerState).isAttacking = false; }, 100);
   };
 
   const performDig = (p: PlayerState) => {
-      p.isAttacking = true;
-      p.attackCooldown = 15;
-      
+      p.isAttacking = true; p.attackCooldown = 15;
       const gridX = Math.floor((p.x + (p.facingRight ? p.width + 10 : -10)) / TILE_SIZE);
       const gridY = Math.floor((p.y + p.height/2) / TILE_SIZE);
-      
-      const blockIndex = level.current.blocks.findIndex(b => 
-          Math.floor(b.x / TILE_SIZE) === gridX && Math.floor(b.y / TILE_SIZE) === gridY
-      );
-
+      const blockIndex = level.current.blocks.findIndex(b => Math.floor(b.x / TILE_SIZE) === gridX && Math.floor(b.y / TILE_SIZE) === gridY);
       if (blockIndex !== -1) {
           const block = level.current.blocks[blockIndex];
           if (block.type !== 'BEDROCK' && block.type !== 'PORTAL') {
@@ -301,580 +305,301 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
               spawnParticles(block.x + TILE_SIZE/2, block.y + TILE_SIZE/2, '#888', 8);
               audioController.playSFX('COIN');
               const ctx = staticLevelCanvas.current?.getContext('2d');
-              if (ctx) {
-                  ctx.clearRect(block.x, block.y, TILE_SIZE, TILE_SIZE);
-              }
+              if (ctx) ctx.clearRect(block.x, block.y, TILE_SIZE, TILE_SIZE);
           }
       }
       setTimeout(() => { p.isAttacking = false; }, 200);
   };
 
-  const checkCollision = (p: PlayerState | Entity, axis: 'x' | 'y') => {
-    const isPlayer = (p as any).isGrounded !== undefined;
-    // if (p.x < 0) p.x = 0; // Handled in update now
+  const checkCollision = (obj: Entity | PlayerState, axis: 'x' | 'y') => {
+    const isPlayer = (obj as any).isGrounded !== undefined;
     const checkRadius = 150;
-    let collided = false;
 
     for (const block of level.current.blocks) {
-      if (Math.abs(block.x - p.x) > checkRadius || Math.abs(block.y - p.y) > checkRadius) continue;
+      if (Math.abs(block.x - obj.x) > checkRadius || Math.abs(block.y - obj.y) > checkRadius) continue;
       
       if (isPlayer) {
-          if (block.type === 'LAVA' && rectIntersect(p.x+4, p.y, p.width-8, p.height, block.x, block.y, TILE_SIZE, TILE_SIZE)) {
-             if (!isFlying.current) die(); 
-             return;
+          if (block.type === 'LAVA' && rectIntersect(obj.x+4, obj.y, obj.width-8, obj.height, block.x, block.y, TILE_SIZE, TILE_SIZE)) {
+             if (!isFlying.current) die(); return;
           }
-          if (block.type === 'PORTAL') {
-              // Expanded portal collision area (3x4 size based on draw logic)
-              if (rectIntersect(p.x, p.y, p.width, p.height, block.x, block.y - TILE_SIZE * 3, TILE_SIZE * 3, TILE_SIZE * 4)) {
-                  const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
-                  if (boss) return; 
-                  audioController.playSFX('WIN');
-                  onWin(score);
-                  (p as PlayerState).isDead = true; 
-                  return;
-              }
+          if (block.type === 'PORTAL' && rectIntersect(obj.x, obj.y, obj.width, obj.height, block.x, block.y - TILE_SIZE * 3, TILE_SIZE * 3, TILE_SIZE * 4)) {
+              if (level.current.enemies.some(e => e.type === 'ENEMY_BOSS' && !e.dead)) return;
+              onWin(score); (obj as PlayerState).isDead = true; return;
           }
       }
 
       if (!block.solid) continue;
 
-      if (rectIntersect(p.x, p.y, p.width, p.height, block.x, block.y, TILE_SIZE, TILE_SIZE)) {
-          collided = true;
+      if (rectIntersect(obj.x, obj.y, obj.width, obj.height, block.x, block.y, TILE_SIZE, TILE_SIZE)) {
           if (axis === 'x') {
-            if (p.vx > 0) p.x = block.x - p.width;
-            else if (p.vx < 0) p.x = block.x + TILE_SIZE;
-            p.vx = 0;
+            obj.vx = isPlayer ? 0 : -obj.vx; 
+            obj.x = obj.vx > 0 || (isPlayer && (obj as PlayerState).facingRight) ? block.x - obj.width : block.x + TILE_SIZE; 
           } else {
-            if (p.vy > 0) {
-              p.y = block.y - p.height;
-              if(isPlayer) (p as PlayerState).isGrounded = true;
-              p.vy = 0;
-            } else if (p.vy < 0) {
-              p.y = block.y + TILE_SIZE;
-              p.vy = 0;
-            }
+            if (obj.vy > 0) { obj.y = block.y - obj.height; if(isPlayer) (obj as PlayerState).isGrounded = true; } 
+            else { obj.y = block.y + TILE_SIZE; }
+            obj.vy = 0;
           }
       }
     }
-    return collided;
   };
 
   const updateEntities = () => {
     const p = player.current;
-    const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
     
-    if (boss && Math.abs(p.x - boss.x) < 800) {
-        if (!bossActive) setBossActive(true);
-    } else {
-        if (bossActive) setBossActive(false);
-    }
-
+    // Projectiles
     if (level.current.projectiles) {
         level.current.projectiles.forEach(proj => {
             if (proj.dead) return;
-            let nearestDist = Infinity;
-            let target: Entity | null = null;
-            level.current.enemies.forEach(e => {
-                if (e.dead) return;
-                const dx = e.x - proj.x;
-                const dy = e.y - proj.y;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist < ATTACK_RANGE && dist < nearestDist) {
-                    nearestDist = dist;
-                    target = e;
-                }
-            });
+            proj.x += proj.vx; proj.y += proj.vy;
+            if (proj.projectileType === 'TNT' || proj.projectileType === 'POTION' || proj.projectileType === 'SNOWBALL' || proj.projectileType === 'EGG') proj.vy += GRAVITY * 0.5;
 
-            // Specific logic: TNT arcs
-            if (proj.projectileType === 'TNT') {
-                proj.vy += GRAVITY * 0.5; // Gravity affects TNT
-            } else if (target) {
-                // Homing for basic and some others
-                const t = target as Entity;
-                const dx = (t.x + t.width/2) - proj.x;
-                const dy = (t.y + t.height/2) - proj.y;
-                const angle = Math.atan2(dy, dx);
-                proj.vx = Math.cos(angle) * PROJECTILE_SPEED;
-                proj.vy = Math.sin(angle) * PROJECTILE_SPEED;
+            // Player hit check (if red)
+            if (proj.color === '#FF0000' && rectIntersect(proj.x, proj.y, proj.width, proj.height, p.x, p.y, p.width, p.height)) {
+                takeDamage(1); proj.dead = true;
             }
-            proj.x += proj.vx;
-            proj.y += proj.vy;
 
-            for (const e of level.current.enemies) {
-                if (e.dead) continue;
-                if (rectIntersect(proj.x, proj.y, proj.width, proj.height, e.x, e.y, e.width, e.height)) {
-                    proj.dead = true;
-                    e.hp--;
-                    // Explosion effect for TNT
-                    if (proj.projectileType === 'TNT') spawnParticles(proj.x, proj.y, '#FFF', 20);
-                    
-                    spawnParticles(e.x + e.width/2, e.y + e.height/2, '#ff0000', 3);
-                    if (e.hp <= 0) {
-                        e.dead = true;
-                        onAddScore(e.type === 'ENEMY_BOSS' ? 2000 : 100);
-                        audioController.playSFX('EXPLODE');
-                    } else {
-                        e.vx = proj.vx > 0 ? 3 : -3;
-                        e.vy = -2;
+            // Enemy hit check (if not red)
+            if (proj.color !== '#FF0000') {
+                for (const e of level.current.enemies) {
+                    if (e.dead) continue;
+                    if (rectIntersect(proj.x, proj.y, proj.width, proj.height, e.x, e.y, e.width, e.height)) {
+                        proj.dead = true; e.hp--;
+                        spawnParticles(e.x + e.width/2, e.y + e.height/2, '#ff0000', 3);
+                        if (e.hp <= 0) {
+                            e.dead = true; onAddScore(e.type === 'ENEMY_BOSS' ? 2000 : 100); audioController.playSFX('EXPLODE');
+                        } else {
+                            e.vx = proj.vx > 0 ? 3 : -3; e.vy = -2;
+                        }
+                        break;
                     }
-                    break;
                 }
             }
-            if (proj.x < camera.current.x - 100 || proj.x > camera.current.x + CANVAS_WIDTH + 100 || proj.y > CANVAS_HEIGHT) {
-                proj.dead = true;
-            }
+            if (proj.lifeTime) { proj.lifeTime--; if(proj.lifeTime <=0) proj.dead=true; }
+            if (proj.x < camera.current.x - 100 || proj.x > camera.current.x + CANVAS_WIDTH + 100 || proj.y > CANVAS_HEIGHT) proj.dead = true;
         });
         level.current.projectiles = level.current.projectiles.filter(b => !b.dead);
-    }
-
-    level.current.enemies.forEach(e => {
-      if (e.dead) return;
-      const distToPlayer = p.x - e.x;
-      const absDist = Math.abs(distToPlayer);
-      
-      if (e.type === 'ENEMY_GHAST') {
-          if (absDist < 400) {
-              e.x += (distToPlayer > 0 ? 0.05 : -0.05) * 30;
-              e.y += (p.y - e.y > 0 ? 0.02 : -0.02) * 30;
-          }
-      } else if (e.type === 'ENEMY_BOSS') {
-           if (absDist < 800) {
-                const idealY = 150 + Math.sin(Date.now() / 1000) * 80;
-                const dy = idealY - e.y;
-                e.y += dy * 0.05;
-                const idealX = p.x + Math.sin(Date.now() / 1500) * 200;
-                const dx = idealX - e.x;
-                e.x += dx * 0.03;
-           }
-      } else {
-          e.vy += GRAVITY;
-          if (e.type === 'ENEMY_ZOMBIE') {
-              if (absDist < 300) e.vx = (distToPlayer > 0 ? 1 : -1) * 1.0;
-              else e.vx = 0;
-          } else if (e.type === 'ENEMY_ENDERMAN') {
-               if (absDist < 200) {
-                   e.vx = (distToPlayer > 0 ? 1 : -1) * 2.0; 
-                   if (Math.random() < 0.01) e.vy = -5;
-               } else e.vx = 0;
-          } else {
-              if (Math.random() < 0.02) e.vx = Math.random() > 0.5 ? 1 : -1;
-          }
-          e.vx *= FRICTION;
-          e.x += e.vx;
-          
-          // Boundary check for enemies
-          if (e.x < 0) { e.x = 0; e.vx *= -1; }
-          if (level.current.mapWidth && e.x > level.current.mapWidth - e.width) {
-              e.x = level.current.mapWidth - e.width; e.vx *= -1;
-          }
-
-          checkCollision(e, 'x');
-          e.y += e.vy;
-          checkCollision(e, 'y');
-      }
-
-      if (!p.isDead && Math.abs(e.x - p.x) < 60 && Math.abs(e.y - p.y) < 60) {
-          if (rectIntersect(p.x + 4, p.y, p.width - 8, p.height, e.x, e.y, e.width, e.height)) {
-            takeDamage(1);
-            p.vx = (p.x - e.x) > 0 ? 10 : -10; 
-            p.vy = -5;
-          }
-      }
-    });
-
-    particles.current.forEach(part => {
-        part.x += part.vx;
-        part.y += part.vy;
-        part.lifeTime = (part.lifeTime || 0) - 1;
-    });
-    particles.current = particles.current.filter(p => (p.lifeTime || 0) > 0);
-  };
-
-  const takeDamage = (amount: number) => {
-      if (isFlying.current) return;
-      player.current.health -= amount;
-      audioController.playSFX('EXPLODE');
-      if (player.current.health <= 0) die();
-  };
-
-  const die = () => {
-    if (player.current.isDead) return;
-    if (isFlying.current && player.current.y < CANVAS_HEIGHT) return; 
-    player.current.isDead = true;
-    audioController.playSFX('EXPLODE');
-    setTimeout(onGameOver, 1000);
-  };
-
-  const spawnParticles = (x: number, y: number, color: string, count: number) => {
-      for(let i=0; i<count; i++) {
-          particles.current.push({
-              id: Math.random().toString(),
-              type: 'PARTICLE',
-              x, y, width: 4, height: 4,
-              vx: (Math.random() - 0.5) * 5,
-              vy: (Math.random() - 0.5) * 5,
-              lifeTime: 30,
-              color, hp: 0, maxHp: 0
-          });
-      }
-  };
-
-  const rectIntersect = (x1: number, y1: number, w1: number, h1: number, x2: number, y2: number, w2: number, h2: number) => {
-    return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
-  };
-
-  const draw = () => {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
-
-    // Background color based on Biome
-    switch(level.current.biome) {
-        case 'PLAINS': ctx.fillStyle = '#87CEEB'; break;
-        case 'DESERT': ctx.fillStyle = '#F0E68C'; break;
-        case 'SNOW': ctx.fillStyle = '#E0F7FA'; break;
-        case 'NETHER': ctx.fillStyle = '#3B0000'; break; 
-        case 'THE_END': ctx.fillStyle = '#14001A'; break; 
-        default: ctx.fillStyle = '#87CEEB';
-    }
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    ctx.save();
-    ctx.translate(-Math.floor(camera.current.x), 0);
-
-    if (staticLevelCanvas.current) {
-        const sx = Math.max(0, camera.current.x);
-        const sy = 0;
-        const sw = CANVAS_WIDTH;
-        const sh = CANVAS_HEIGHT;
-        ctx.drawImage(staticLevelCanvas.current, sx, sy, sw, sh, sx, sy, sw, sh);
-    }
-
-    // Draw Portals (Custom End Portal Rendering)
-    level.current.blocks.forEach(b => {
-        if (b.type === 'PORTAL') {
-             const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
-             
-             // Draw Portal Frame (End Stone Style)
-             const portalWidth = TILE_SIZE * 3;
-             const portalHeight = TILE_SIZE * 4;
-             // b.x, b.y is bottom-left marker. Draw upwards and right.
-             const startX = b.x;
-             const startY = b.y - TILE_SIZE * 3; 
-
-             // Inner Void (The Portal itself)
-             if (!boss) {
-                 ctx.fillStyle = '#110011'; // Void black
-                 ctx.fillRect(startX + 4, startY + 4, portalWidth - 8, portalHeight - 4);
-                 
-                 // Stars/Sparkles
-                 if (Math.random() > 0.5) {
-                     ctx.fillStyle = '#d946ef'; // Purple particles
-                     ctx.fillRect(startX + 10 + Math.random()*(portalWidth-20), startY + 10 + Math.random()*(portalHeight-20), 4, 4);
-                     ctx.fillStyle = '#ffffff'; // White stars
-                     ctx.fillRect(startX + 10 + Math.random()*(portalWidth-20), startY + 10 + Math.random()*(portalHeight-20), 2, 2);
-                 }
-             } else {
-                 // Inactive Portal (Obsidian fill)
-                 ctx.fillStyle = '#1a1a1a';
-                 ctx.fillRect(startX + 4, startY + 4, portalWidth - 8, portalHeight - 4);
-             }
-
-             // Frame
-             ctx.fillStyle = '#DFE0A8'; // End Stone color
-             // Left Pillar
-             ctx.fillRect(startX, startY, 8, portalHeight);
-             // Right Pillar
-             ctx.fillRect(startX + portalWidth - 8, startY, 8, portalHeight);
-             // Top Bar
-             ctx.fillRect(startX, startY, portalWidth, 8);
-             
-             // Eyes of Ender (if active)
-             if (!boss) {
-                 ctx.fillStyle = '#10B981';
-                 ctx.fillRect(startX + 2, startY + 2, 4, 4);
-                 ctx.fillRect(startX + portalWidth - 6, startY + 2, 4, 4);
-             }
-        }
-    });
-
-    // Projectiles with Custom Styles
-    if (level.current.projectiles) {
-        level.current.projectiles.forEach(proj => {
-            ctx.save();
-            ctx.translate(proj.x + proj.width/2, proj.y + proj.height/2);
-            
-            if (proj.projectileType === 'ARROW') {
-                ctx.rotate(Math.atan2(proj.vy, proj.vx));
-                ctx.fillStyle = '#5c4033'; // Wood shaft
-                ctx.fillRect(-6, -1, 12, 2);
-                ctx.fillStyle = '#ccc'; // Feather
-                ctx.fillRect(-6, -3, 3, 6);
-                ctx.fillStyle = '#999'; // Tip
-                ctx.fillRect(6, -2, 2, 4);
-            } else if (proj.projectileType === 'TNT') {
-                ctx.fillStyle = '#ef4444'; // Red
-                ctx.fillRect(-6, -6, 12, 12);
-                ctx.fillStyle = '#fff'; // White band
-                ctx.fillRect(-6, -2, 12, 4);
-                ctx.fillStyle = '#000'; 
-                ctx.font = '8px monospace';
-                ctx.fillText("TNT", -6, 2);
-            } else if (proj.projectileType === 'FIREBALL') {
-                ctx.fillStyle = '#f97316'; // Orange
-                ctx.beginPath();
-                ctx.arc(0, 0, 6, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#fbbf24'; // Yellow core
-                ctx.beginPath();
-                ctx.arc(0, 0, 3, 0, Math.PI * 2);
-                ctx.fill();
-            } else if (proj.projectileType === 'PEARL') {
-                ctx.fillStyle = '#10B981'; // Ender Green
-                ctx.beginPath();
-                ctx.arc(0, 0, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = '#065F46';
-                ctx.stroke();
-            } else if (proj.projectileType === 'POTION') {
-                ctx.fillStyle = '#ec4899'; // Pink potion
-                ctx.beginPath();
-                ctx.arc(0, 2, 4, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = '#fff'; // Neck
-                ctx.fillRect(-1, -4, 2, 3);
-            } else if (proj.projectileType === 'BONE') {
-                ctx.fillStyle = '#fff';
-                ctx.rotate(Date.now() / 100); // Spin
-                ctx.fillRect(-4, -1, 8, 2);
-                ctx.fillRect(-5, -2, 2, 4);
-                ctx.fillRect(3, -2, 2, 4);
-            } else {
-                 // Default Ball
-                ctx.fillStyle = '#FFFF00'; 
-                ctx.beginPath();
-                ctx.arc(0, 0, 4, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.restore();
-        });
     }
 
     // Enemies
     level.current.enemies.forEach(e => {
       if (e.dead) return;
-      if (e.x < camera.current.x - 100 || e.x > camera.current.x + CANVAS_WIDTH + 100) return;
+      if (e.x < camera.current.x - 200 || e.x > camera.current.x + CANVAS_WIDTH + 200) return;
 
-      if (e.type === 'ENEMY_GHAST') {
-          ctx.fillStyle = '#F0F0F0';
-          ctx.fillRect(e.x, e.y, e.width, e.height);
-          ctx.fillStyle = '#000';
-          ctx.fillRect(e.x + 10, e.y + 15, 8, 2); 
-          ctx.fillRect(e.x + 30, e.y + 15, 8, 2);
-          ctx.fillRect(e.x + 20, e.y + 30, 8, 8);
-      } else if (e.type === 'ENEMY_ZOMBIE') {
-          ctx.fillStyle = '#3b82f6'; 
-          ctx.fillRect(e.x + 4, e.y + 18, 16, 12);
-          ctx.fillStyle = '#00AAAA'; 
-          ctx.fillRect(e.x + 4, e.y + 8, 16, 10);
-          ctx.fillStyle = '#3D6836';
-          ctx.fillRect(e.x, e.y - 4, 24, 12);
-          ctx.fillStyle = '#00AAAA';
-          ctx.fillRect(e.x - 4, e.y + 8, 28, 6);
-      } else if (e.type === 'ENEMY_ENDERMAN') {
-          ctx.fillStyle = '#111';
-          ctx.fillRect(e.x, e.y, e.width, e.height);
-          ctx.fillStyle = '#cc00fa'; 
-          ctx.fillRect(e.x + 2, e.y + 10, 6, 2);
-          ctx.fillRect(e.x + 16, e.y + 10, 6, 2);
-      } else if (e.type === 'ENEMY_BOSS') {
-          const facingLeft = player.current.x < e.x;
-          ctx.fillStyle = '#111'; 
-          ctx.fillStyle = '#222';
-          const wingFlap = Math.sin(Date.now() / 150) * 20;
-          ctx.beginPath();
-          ctx.moveTo(e.x + 50, e.y + 30);
-          ctx.lineTo(e.x + 10, e.y - 10 + wingFlap);
-          ctx.lineTo(e.x + 90, e.y - 10 + wingFlap);
-          ctx.fill();
-          ctx.fillStyle = '#000'; 
-          ctx.fillRect(e.x + 20, e.y + 20, 60, 20);
-          ctx.fillStyle = '#111';
-          if (facingLeft) {
-              ctx.fillRect(e.x, e.y + 10, 30, 20);
-              ctx.fillStyle = '#bd00ff'; 
-              ctx.fillRect(e.x + 5, e.y + 15, 8, 4);
-              ctx.fillStyle = '#111';
-              ctx.fillRect(e.x + 80, e.y + 25, 20, 10);
-          } else {
-              ctx.fillRect(e.x + 70, e.y + 10, 30, 20);
-              ctx.fillStyle = '#bd00ff'; 
-              ctx.fillRect(e.x + 85, e.y + 15, 8, 4);
-              ctx.fillStyle = '#111';
-              ctx.fillRect(e.x, e.y + 25, 20, 10);
+      const config = MOBS[e.type] || MOBS['ENEMY_ZOMBIE'];
+      const distToPlayer = p.x - e.x;
+      const absDist = Math.abs(distToPlayer);
+
+      // Behavior
+      if (config.behavior === 'FLY') {
+          if (absDist < 500) {
+              const dy = (p.y - e.y);
+              e.x += (distToPlayer > 0 ? 0.05 : -0.05) * 30;
+              e.y += (dy > 0 ? 0.02 : -0.02) * 30;
           }
-      } else {
-          ctx.fillStyle = '#22c55e';
-          ctx.fillRect(e.x, e.y, e.width, e.height);
-          ctx.fillStyle = '#000';
-          ctx.fillRect(e.x + 4, e.y + 4, 4, 4);
-          ctx.fillRect(e.x + 16, e.y + 4, 4, 4);
-          ctx.fillRect(e.x + 8, e.y + 10, 8, 8);
+      } else if (config.behavior === 'BOSS') {
+           if (absDist < 800) {
+                setBossActive(true);
+                const idealY = 150 + Math.sin(Date.now() / 1000) * 80;
+                e.y += (idealY - e.y) * 0.05;
+                const idealX = p.x + Math.sin(Date.now() / 1500) * 200;
+                e.x += (idealX - e.x) * 0.03;
+           }
+      } else if (config.behavior === 'JUMP') {
+          e.vy += GRAVITY;
+          if (e.vy === 0 && Math.random() < 0.05) { e.vy = -8; e.vx = (distToPlayer > 0 ? 1 : -1) * 3; }
+          if (e.vy === 0) e.vx = 0; 
+          e.x += e.vx; e.y += e.vy;
+          checkCollision(e, 'x'); checkCollision(e, 'y');
+      } else if (config.behavior === 'TELEPORT') {
+           e.vy += GRAVITY; e.y += e.vy; checkCollision(e, 'y');
+           if (absDist < 200 && Math.random() < 0.02) {
+               e.x = p.x + (Math.random() > 0.5 ? 100 : -100);
+               spawnParticles(e.x, e.y, '#CC00FA', 10);
+           }
+      } else { // WALK
+          e.vy += GRAVITY;
+          if (absDist < 400) e.vx = (distToPlayer > 0 ? 1 : -1) * config.vx; else e.vx = 0;
+          e.x += e.vx; e.y += e.vy;
+          checkCollision(e, 'x'); checkCollision(e, 'y');
+      }
+
+      // Shooting
+      if (config.projectile && absDist < 400 && !e.dead) {
+          if (e.attackCooldown) e.attackCooldown--;
+          if ((e.attackCooldown || 0) <= 0) {
+               fireProjectile(e, undefined, config.projectile);
+               e.attackCooldown = 150;
+          }
+      }
+
+      // Player Collision
+      if (!p.isDead && Math.abs(e.x - p.x) < 40 && Math.abs(e.y - p.y) < 40) {
+          if (rectIntersect(p.x + 4, p.y, p.width - 8, p.height, e.x, e.y, e.width, e.height)) {
+            takeDamage(1); p.vx = (p.x - e.x) > 0 ? 8 : -8; p.vy = -5;
+          }
       }
     });
 
-    particles.current.forEach(p => {
-        ctx.fillStyle = p.color || '#fff';
-        ctx.fillRect(p.x, p.y, p.width, p.height);
+    particles.current.forEach(part => { part.x += part.vx; part.y += part.vy; part.lifeTime = (part.lifeTime || 0) - 1; });
+    particles.current = particles.current.filter(p => (p.lifeTime || 0) > 0);
+  };
+
+  const takeDamage = (amount: number) => {
+      if (isFlying.current) return;
+      player.current.health -= amount; audioController.playSFX('EXPLODE');
+      if (player.current.health <= 0) die();
+  };
+
+  const die = () => { if (player.current.isDead) return; player.current.isDead = true; audioController.playSFX('EXPLODE'); setTimeout(onGameOver, 1000); };
+
+  const spawnParticles = (x: number, y: number, color: string, count: number) => {
+      for(let i=0; i<count; i++) particles.current.push({ id: Math.random().toString(), type: 'PARTICLE', x, y, width: 4, height: 4, vx: (Math.random()-0.5)*5, vy: (Math.random()-0.5)*5, lifeTime: 30, color, hp: 0, maxHp: 0 });
+  };
+
+  const rectIntersect = (x1: number, y1: number, w1: number, h1: number, x2: number, y2: number, w2: number, h2: number) => x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+
+  const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, mainColor: string, topColor?: string, transparent: boolean = false) => {
+    if (transparent) ctx.globalAlpha = 0.6;
+    ctx.fillStyle = mainColor; ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+    ctx.fillStyle = 'rgba(0,0,0,0.1)';
+    for(let i=0; i<3; i++) ctx.fillRect(x+Math.random()*TILE_SIZE, y+Math.random()*TILE_SIZE, 4, 4);
+    if (topColor) { ctx.fillStyle = topColor; ctx.fillRect(x, y, TILE_SIZE, 6); }
+    if (transparent) ctx.globalAlpha = 1.0;
+  };
+
+  const draw = () => {
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    
+    // BG
+    ctx.fillStyle = biome === 'NETHER' ? '#3B0000' : biome === 'THE_END' ? '#14001A' : '#87CEEB';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.save();
+    ctx.translate(-Math.floor(camera.current.x), 0);
+
+    if (staticLevelCanvas.current) ctx.drawImage(staticLevelCanvas.current, Math.max(0, camera.current.x), 0, CANVAS_WIDTH, CANVAS_HEIGHT, Math.max(0, camera.current.x), 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+    // Portals
+    level.current.blocks.forEach(b => {
+        if (b.type === 'PORTAL') {
+             const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
+             const pw = TILE_SIZE*3, ph = TILE_SIZE*4;
+             ctx.fillStyle = !boss ? '#110011' : '#1a1a1a';
+             ctx.fillRect(b.x+4, b.y-ph+4, pw-8, ph-4);
+             if(!boss && Math.random()>0.5) { ctx.fillStyle = '#d946ef'; ctx.fillRect(b.x+10+Math.random()*pw, b.y-ph+10+Math.random()*ph, 4, 4); }
+             ctx.fillStyle = '#DFE0A8';
+             ctx.fillRect(b.x, b.y-ph, 8, ph); ctx.fillRect(b.x+pw-8, b.y-ph, 8, ph); ctx.fillRect(b.x, b.y-ph, pw, 8);
+        }
     });
+
+    // Projectiles
+    level.current.projectiles.forEach(p => {
+        ctx.save(); ctx.translate(p.x + p.width/2, p.y + p.height/2);
+        if (p.projectileType === 'ARROW') {
+            ctx.rotate(Math.atan2(p.vy, p.vx)); ctx.fillStyle = '#5c4033'; ctx.fillRect(-6, -1, 12, 2);
+        } else if (p.projectileType === 'TRIDENT') {
+            ctx.rotate(Math.atan2(p.vy, p.vx)); ctx.fillStyle = '#06b6d4'; ctx.fillRect(-8, -2, 16, 4); ctx.fillRect(4, -6, 2, 12);
+        } else if (p.projectileType === 'SONIC_BOOM') {
+            ctx.fillStyle = '#0ea5e9'; ctx.beginPath(); ctx.arc(0,0, p.width/2, 0, Math.PI*2); ctx.fill();
+        } else {
+            ctx.fillStyle = p.projectileType === 'FIREBALL' ? '#f97316' : p.projectileType === 'SNOWBALL' ? '#fff' : p.projectileType === 'POTION' ? '#ec4899' : '#fff';
+            ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+    });
+
+    // Enemies
+    level.current.enemies.forEach(e => {
+        if (e.dead || e.x < camera.current.x - 100 || e.x > camera.current.x + CANVAS_WIDTH + 100) return;
+        const conf = MOBS[e.type];
+        if (!conf) return;
+
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        
+        // Draw HP Bar
+        if (e.hp < e.maxHp) {
+            ctx.fillStyle = 'red'; ctx.fillRect(0, -8, e.width, 4);
+            ctx.fillStyle = 'green'; ctx.fillRect(0, -8, e.width * (e.hp/e.maxHp), 4);
+        }
+
+        if (conf.behavior === 'BOSS') {
+            ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(50, 30); ctx.lineTo(10, -10); ctx.lineTo(90, -10); ctx.fill();
+            ctx.fillRect(20, 20, 60, 20);
+        } else {
+            // Generic Mob Drawing based on config color
+            ctx.fillStyle = conf.color;
+            ctx.fillRect(0, 0, e.width, e.height);
+            // Simple eyes
+            ctx.fillStyle = (e.type === 'ENEMY_ENDERMAN' || e.type === 'ENEMY_PHANTOM') ? '#CC00FA' : '#000';
+            ctx.fillRect(4, 4, 4, 4); ctx.fillRect(e.width-8, 4, 4, 4);
+        }
+        ctx.restore();
+    });
+
+    particles.current.forEach(p => { ctx.fillStyle = p.color || '#fff'; ctx.fillRect(p.x, p.y, p.width, p.height); });
 
     // Player
     const p = player.current;
     const charData = CHARACTERS.find(c => c.id === character) || CHARACTERS[0];
     ctx.save();
-    if (!p.facingRight) {
-        ctx.translate(p.x + p.width, p.y);
-        ctx.scale(-1, 1);
-        ctx.translate(-p.x - p.width, -p.y);
+    
+    // Dinnerbone Effect
+    if (character === CharacterType.DINNERBONE) {
+        ctx.translate(p.x + p.width/2, p.y + p.height/2);
+        ctx.rotate(Math.PI);
+        ctx.translate(-p.x - p.width/2, -p.y - p.height/2);
     }
+    
+    if (!p.facingRight) { ctx.translate(p.x + p.width, p.y); ctx.scale(-1, 1); ctx.translate(-p.x - p.width, -p.y); }
     
     // Weapon
-    ctx.save();
-    ctx.translate(p.x + p.width/2 + 5, p.y + p.height/2 + 5);
-    ctx.fillStyle = '#333';
-    ctx.fillRect(0, 0, 12, 6);
-    ctx.fillStyle = '#555';
-    ctx.fillRect(-4, 2, 6, 6); 
-    if (p.isAttacking) {
-         ctx.fillStyle = '#FFA500';
-         ctx.beginPath();
-         ctx.arc(14, 3, Math.random() * 6 + 2, 0, Math.PI*2);
-         ctx.fill();
-    }
-    ctx.restore();
-
-    // Body
-    ctx.fillStyle = charData.legs;
-    if (Math.abs(p.vx) > 0.1 && !isFlying.current) {
-       const walkOffset = Math.sin(Date.now() / 100) * 4;
-       ctx.fillRect(p.x + 4 + walkOffset, p.y + 18, 6, 12);
-       ctx.fillRect(p.x + 14 - walkOffset, p.y + 18, 6, 12);
+    ctx.save(); ctx.translate(p.x + p.width/2 + 5, p.y + p.height/2 + 5);
+    if (charData.projectileType === 'TRIDENT') {
+         ctx.fillStyle = '#06b6d4'; ctx.fillRect(0, -6, 2, 18); ctx.fillRect(-4, -6, 10, 2);
+    } else if (charData.projectileType === 'SNOWBALL' || charData.projectileType === 'EGG') {
+         ctx.fillStyle = '#FFF'; ctx.beginPath(); ctx.arc(6, 4, 4, 0, Math.PI*2); ctx.fill();
     } else {
-       if (isFlying.current) {
-           ctx.fillRect(p.x + 4, p.y + 20, 6, 8); 
-           ctx.fillRect(p.x + 14, p.y + 20, 6, 8);
-           ctx.fillStyle = '#FFA500';
-           ctx.fillRect(p.x + 6, p.y + 28, 4, Math.random()*6);
-           ctx.fillRect(p.x + 16, p.y + 28, 4, Math.random()*6);
-       } else {
-           ctx.fillRect(p.x + 4, p.y + 18, 6, 12);
-           ctx.fillRect(p.x + 14, p.y + 18, 6, 12);
-       }
+         ctx.fillStyle = '#333'; ctx.fillRect(0, 0, 12, 6);
     }
-    ctx.fillStyle = charData.color;
-    ctx.fillRect(p.x + 4, p.y + 8, 16, 12);
-    
-    // Head
-    if (charData.face) {
-        const pixelSize = 2.5;
-        const headX = p.x + 2;
-        const headY = p.y - 4;
-        charData.face.forEach((row, rowIndex) => {
-            row.forEach((colColor, colIndex) => {
-                ctx.fillStyle = colColor;
-                ctx.fillRect(headX + colIndex * pixelSize, headY + rowIndex * pixelSize, pixelSize, pixelSize);
-            });
-        });
-    }
-
     ctx.restore();
-    ctx.restore(); 
 
-    // UI
-    if (flyingModeUI) {
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        ctx.fillRect(CANVAS_WIDTH/2 - 80, 80, 160, 30);
-        ctx.fillStyle = '#fbbf24';
-        ctx.font = '20px VT323';
-        ctx.textAlign = 'center';
-        ctx.fillText("飞行模式已开启 (F)", CANVAS_WIDTH/2, 100);
+    // Body & Head (Reusing logic)
+    ctx.fillStyle = charData.legs; 
+    if (Math.abs(p.vx) > 0.1 && !isFlying.current) {
+        const w = Math.sin(Date.now()/100)*4; ctx.fillRect(p.x+4+w, p.y+18, 6, 12); ctx.fillRect(p.x+14-w, p.y+18, 6, 12);
+    } else {
+        ctx.fillRect(p.x+4, p.y+18, 6, 12); ctx.fillRect(p.x+14, p.y+18, 6, 12);
     }
+    ctx.fillStyle = charData.color; ctx.fillRect(p.x+4, p.y+8, 16, 12);
+    
+    if (charData.face) {
+        const px = 2.5; const hx = p.x+2; const hy = p.y-4;
+        charData.face.forEach((r, ri) => r.forEach((c, ci) => { ctx.fillStyle = c; ctx.fillRect(hx+ci*px, hy+ri*px, px, px); }));
+    }
+    
+    ctx.restore();
+    ctx.restore();
 
-    const boss = level.current.enemies.find(e => e.type === 'ENEMY_BOSS' && !e.dead);
-    if (boss && bossActive) {
-        const barWidth = 400;
-        const barHeight = 20;
-        const barX = (CANVAS_WIDTH - barWidth) / 2;
-        const barY = 40;
-        ctx.fillStyle = '#FFF';
-        ctx.font = 'bold 24px VT323';
-        ctx.textAlign = 'center';
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur = 4;
-        ctx.fillText("末影龙", CANVAS_WIDTH / 2, barY - 8);
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = '#222';
-        ctx.fillRect(barX - 2, barY - 2, barWidth + 4, barHeight + 4);
-        const hpPercent = Math.max(0, boss.hp / boss.maxHp);
-        ctx.fillStyle = '#d946ef'; 
-        ctx.fillRect(barX, barY, barWidth * hpPercent, barHeight);
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        for(let i=1; i<10; i++) ctx.fillRect(barX + (barWidth/10)*i, barY, 2, barHeight);
-    } else if (!boss && level.current.enemies.some(e => e.type === 'ENEMY_BOSS')) {
-         if (Math.floor(Date.now() / 500) % 2 === 0) {
-             ctx.fillStyle = '#4ade80';
-             ctx.font = 'bold 30px VT323';
-             ctx.textAlign = 'center';
-             ctx.fillText("传送门已开启！快逃！", CANVAS_WIDTH / 2, 80);
-         }
+    // UI: HP & Boss Bar
+    if (bossActive && level.current.enemies.some(e=>e.type==='ENEMY_BOSS')) {
+        const boss = level.current.enemies.find(e=>e.type==='ENEMY_BOSS');
+        if (boss) {
+            const bx = (CANVAS_WIDTH-400)/2;
+            ctx.fillStyle = '#222'; ctx.fillRect(bx, 40, 400, 20);
+            ctx.fillStyle = '#d946ef'; ctx.fillRect(bx, 40, 400*(boss.hp/boss.maxHp), 20);
+            ctx.fillStyle = '#FFF'; ctx.font = '20px VT323'; ctx.fillText("BOSS", bx, 35);
+        }
     }
 
     for(let i=0; i<p.maxHealth; i++) {
-        const row = Math.floor(i / 10);
-        const col = i % 10;
-        ctx.fillStyle = i < p.health ? '#ef4444' : '#374151';
-        const hx = 20 + col * 25;
-        const hy = CANVAS_HEIGHT - 40 - (row * 25);
-        ctx.fillRect(hx, hy, 20, 20); 
-        if (i < p.health) {
-             ctx.fillStyle = '#fca5a5';
-             ctx.fillRect(hx+2, hy+2, 6, 6);
-        }
+        const r=Math.floor(i/10), c=i%10;
+        ctx.fillStyle = i<p.health ? '#ef4444' : '#374151';
+        ctx.fillRect(20+c*25, CANVAS_HEIGHT-40-r*25, 20, 20);
     }
   };
 
-  const drawBlock = (ctx: CanvasRenderingContext2D, x: number, y: number, mainColor: string, topColor?: string, transparent: boolean = false) => {
-    if (transparent) ctx.globalAlpha = 0.6;
-    ctx.fillStyle = mainColor;
-    ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
-    
-    ctx.fillStyle = 'rgba(0,0,0,0.1)';
-    for(let i=0; i<4; i++) {
-        const nx = Math.floor(Math.random() * TILE_SIZE);
-        const ny = Math.floor(Math.random() * TILE_SIZE);
-        const ns = Math.floor(Math.random() * 6) + 2;
-        ctx.fillRect(x+nx, y+ny, ns, ns);
-    }
-
-    ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(x+2, y+2, TILE_SIZE-4, TILE_SIZE-4);
-
-    if (topColor) {
-        ctx.fillStyle = topColor;
-        ctx.fillRect(x, y, TILE_SIZE, 6);
-    }
-    if (transparent) ctx.globalAlpha = 1.0;
-  };
-
-  return (
-    <canvas 
-        ref={canvasRef} 
-        width={CANVAS_WIDTH} 
-        height={CANVAS_HEIGHT}
-        className="block mx-auto border-4 border-gray-700 bg-black shadow-2xl rounded-sm"
-        style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%', aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}` }}
-    />
-  );
+  return <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="block mx-auto border-4 border-gray-700 bg-black shadow-2xl rounded-sm" style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%', aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}` }} />;
 };
 
 export default GameCanvas;

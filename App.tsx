@@ -5,7 +5,7 @@ import GameCanvas from './components/GameCanvas';
 import { audioController } from './utils/audio';
 import { generateLevelWithAI } from './services/geminiService';
 import { generateProceduralLevel } from './utils/proceduralGen';
-import { Gamepad2, Skull, Trophy, Play, Settings, Sparkles, Volume2, VolumeX, Swords, Shield, Skull as SkullIcon, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Pickaxe, Feather, Target, Map, Smartphone, Monitor, RotateCw } from 'lucide-react';
+import { Gamepad2, Skull, Trophy, Play, Settings, Sparkles, Volume2, VolumeX, Swords, Shield, Skull as SkullIcon, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Pickaxe, Feather, Target, Map, Smartphone, Monitor, RotateCw, Ruler } from 'lucide-react';
 
 // Orientation Warning Component - ONLY for Game State
 const OrientationWarning = () => (
@@ -25,7 +25,8 @@ const MobileControls = () => {
     window.dispatchEvent(new KeyboardEvent(type, { code: code, bubbles: true }));
   };
 
-  const handleTouch = (code: string, e: React.TouchEvent | React.MouseEvent) => {
+  const handleStart = (code: string, e: React.TouchEvent | React.MouseEvent) => {
+    // Prevent default to avoid context menu / selection on long press
     if (e.cancelable) e.preventDefault();
     e.stopPropagation();
     dispatchKey(code, 'keydown');
@@ -40,29 +41,39 @@ const MobileControls = () => {
   // Button Components
   const DPadBtn = ({ code, icon: Icon, className }: any) => (
     <button
-        className={`w-14 h-14 md:w-16 md:h-16 bg-gray-800/80 rounded-lg border-2 border-gray-600 active:bg-gray-600 active:border-gray-400 flex items-center justify-center text-white transition-colors ${className}`}
-        onTouchStart={(e) => handleTouch(code, e)}
+        className={`w-12 h-12 md:w-14 md:h-14 bg-gray-800/80 rounded-lg border-2 border-gray-600 active:bg-gray-600 active:border-gray-400 flex items-center justify-center text-white transition-colors ${className}`}
+        // Touch Events
+        onTouchStart={(e) => handleStart(code, e)}
         onTouchEnd={(e) => handleEnd(code, e)}
-        onMouseDown={(e) => handleTouch(code, e)}
+        onTouchCancel={(e) => handleEnd(code, e)} // Crucial: Handles interruptions like alerts/scrolls
+        // Mouse Events (for hybrid devices/testing)
+        onMouseDown={(e) => handleStart(code, e)}
         onMouseUp={(e) => handleEnd(code, e)}
         onMouseLeave={(e) => handleEnd(code, e)}
-        style={{ touchAction: 'none' }}
+        // Prevent Context Menu (Right click / Long press)
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
     >
-        <Icon size={28} className="md:w-8 md:h-8" />
+        <Icon size={24} className="md:w-8 md:h-8" />
     </button>
   );
 
   const ActionBtn = ({ code, label, color, icon: Icon, className }: any) => (
       <button
-        className={`w-16 h-16 md:w-20 md:h-20 rounded-full border-4 border-black/30 shadow-xl active:scale-95 active:brightness-110 transition-all flex flex-col items-center justify-center text-white font-bold ${className}`}
-        style={{ backgroundColor: color, touchAction: 'none' }}
-        onTouchStart={(e) => handleTouch(code, e)}
+        className={`w-14 h-14 md:w-16 md:h-16 rounded-full border-4 border-black/30 shadow-xl active:scale-95 active:brightness-110 transition-all flex flex-col items-center justify-center text-white font-bold ${className}`}
+        style={{ backgroundColor: color, touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+        // Touch Events
+        onTouchStart={(e) => handleStart(code, e)}
         onTouchEnd={(e) => handleEnd(code, e)}
-        onMouseDown={(e) => handleTouch(code, e)}
+        onTouchCancel={(e) => handleEnd(code, e)} // Crucial: Handles interruptions like alerts/scrolls
+        // Mouse Events
+        onMouseDown={(e) => handleStart(code, e)}
         onMouseUp={(e) => handleEnd(code, e)}
         onMouseLeave={(e) => handleEnd(code, e)}
+        // Prevent Context Menu
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
       >
-          {Icon && <Icon size={24} className="md:w-8 md:h-8 mb-1" strokeWidth={2.5} />}
+          {Icon && <Icon size={20} className="md:w-6 md:h-6 mb-1" strokeWidth={2.5} />}
           <span className="text-[10px] md:text-xs leading-none">{label}</span>
       </button>
   );
@@ -71,7 +82,7 @@ const MobileControls = () => {
     <div className="absolute inset-0 z-50 pointer-events-none flex flex-col justify-end pb-4 px-6 md:pb-6 md:px-10 select-none touch-none">
         <div className="flex justify-between items-end w-full pointer-events-auto">
             {/* D-Pad */}
-            <div className="relative w-40 h-40 md:w-48 md:h-48 mb-2">
+            <div className="relative w-36 h-36 md:w-48 md:h-48 mb-2">
                 <div className="absolute top-0 left-1/2 -translate-x-1/2">
                      <DPadBtn code="ArrowUp" icon={ArrowUp} />
                 </div>
@@ -87,22 +98,22 @@ const MobileControls = () => {
             </div>
 
             {/* Action Buttons - Spaced out better */}
-            <div className="relative w-48 h-48 md:w-56 md:h-56">
+            <div className="relative w-40 h-40 md:w-56 md:h-56">
                 {/* Jump (Space) - Bottom Right */}
                 <div className="absolute bottom-0 right-0">
                     <ActionBtn code="Space" icon={ArrowUp} label="跳跃" color="#22c55e" className="scale-110" />
                 </div>
                 {/* Attack (J) - Left of Jump */}
-                <div className="absolute bottom-0 right-[80px] md:right-[100px]">
+                <div className="absolute bottom-0 right-[65px] md:right-[85px]">
                     <ActionBtn code="KeyJ" icon={Target} label="攻击" color="#ef4444" className="" />
                 </div>
                 {/* Dig (K) - Above Jump */}
-                 <div className="absolute bottom-[80px] md:bottom-[100px] right-0">
-                    <ActionBtn code="KeyK" icon={Pickaxe} label="挖掘" color="#eab308" className="w-14 h-14 md:w-16 md:h-16" />
+                 <div className="absolute bottom-[65px] md:bottom-[85px] right-0">
+                    <ActionBtn code="KeyK" icon={Pickaxe} label="挖掘" color="#eab308" className="w-12 h-12 md:w-14 md:h-14" />
                 </div>
                 {/* Fly (F) - Top Left of cluster */}
                 <div className="absolute top-0 left-0">
-                     <ActionBtn code="KeyF" icon={Feather} label="飞行" color="#a855f7" className="w-14 h-14 md:w-16 md:h-16" />
+                     <ActionBtn code="KeyF" icon={Feather} label="飞行" color="#a855f7" className="w-12 h-12 md:w-14 md:h-14" />
                 </div>
             </div>
         </div>
@@ -122,6 +133,8 @@ const MenuScreen = ({
   setDifficulty,
   biome,
   setBiome,
+  lengthMultiplier,
+  setLengthMultiplier,
   isMobileMode,
   toggleMobileMode
 }: {
@@ -135,6 +148,8 @@ const MenuScreen = ({
   setDifficulty: (d: Difficulty) => void,
   biome: BiomeType,
   setBiome: (b: BiomeType) => void,
+  lengthMultiplier: number,
+  setLengthMultiplier: (n: number) => void,
   isMobileMode: boolean,
   toggleMobileMode: () => void
 }) => (
@@ -204,6 +219,27 @@ const MenuScreen = ({
                             {b.name}
                          </button>
                      ))}
+                </div>
+            </div>
+
+            {/* Map Length Slider */}
+            <div className="bg-gray-800/90 p-4 rounded-xl border-2 border-gray-600 backdrop-blur-sm">
+                <label className="text-gray-400 text-sm mb-3 block uppercase font-bold tracking-wider flex justify-between">
+                    <span className="flex items-center gap-2"><Ruler size={16}/> 地图长度</span>
+                    <span className="text-yellow-400">{lengthMultiplier}x ({lengthMultiplier * 150} 格)</span>
+                </label>
+                <div className="flex items-center gap-4">
+                    <span className="text-xs text-gray-500">短</span>
+                    <input 
+                        type="range" 
+                        min="1" 
+                        max="10" 
+                        step="1"
+                        value={lengthMultiplier} 
+                        onChange={(e) => setLengthMultiplier(parseInt(e.target.value))}
+                        className="w-full h-3 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500 border border-gray-600"
+                    />
+                    <span className="text-xs text-gray-500">长</span>
                 </div>
             </div>
 
@@ -321,6 +357,7 @@ export default function App() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [isMobileMode, setIsMobileMode] = useState(false);
   const [isPortrait, setIsPortrait] = useState(false);
+  const [lengthMultiplier, setLengthMultiplier] = useState(1);
 
   useEffect(() => {
     // Detect mobile device
@@ -342,7 +379,7 @@ export default function App() {
 
   const startGame = () => {
     if (!aiPrompt && screen !== 'GENERATING_LEVEL') {
-        const randomMap = generateProceduralLevel(difficulty, biome);
+        const randomMap = generateProceduralLevel(difficulty, biome, lengthMultiplier);
         setCurrentLevelMap(randomMap);
     }
     
@@ -383,6 +420,8 @@ export default function App() {
                 setDifficulty={setDifficulty}
                 biome={biome}
                 setBiome={setBiome}
+                lengthMultiplier={lengthMultiplier}
+                setLengthMultiplier={setLengthMultiplier}
                 isMobileMode={isMobileMode}
                 toggleMobileMode={toggleMobileMode}
             />

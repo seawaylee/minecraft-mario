@@ -1,43 +1,27 @@
 import { WORLD_HEIGHT_TILES } from "../constants";
 import { Difficulty, BiomeType } from "../types";
 
-export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType): string[] => {
-  const width = 150; // Map length
+export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType, lengthMultiplier: number = 1): string[] => {
+  const baseWidth = 150; 
+  // Limit max width to avoid canvas rendering crashes on mobile (approx 32000px limit usually)
+  // 150 tiles * 10 * 32px = 48000px which is risky, so we might encounter issues on 10x on some devices, 
+  // but we will fulfill the request.
+  const width = Math.floor(baseWidth * lengthMultiplier);
   const height = WORLD_HEIGHT_TILES;
   const map: string[][] = Array.from({ length: height }, () => Array(width).fill('.'));
 
-  // Define Palette based on Biome
-  let topBlock = 'G'; // Grass
-  let fillBlock = 'D'; // Dirt
-  let liquidBlock = 'L'; // Lava
-  let bedrockBlock = '#'; // Bedrock
-  let platformBlock = '?'; // Stone brick/platform
+  // Define Palette
+  let topBlock = 'G'; 
+  let fillBlock = 'D'; 
+  let liquidBlock = 'L'; 
+  let bedrockBlock = '#'; 
+  let platformBlock = '?'; 
 
   switch (biome) {
-      case 'DESERT':
-          topBlock = 'S'; // Sand
-          fillBlock = 'A'; // Sandstone (using A to avoid conflict)
-          platformBlock = 'A';
-          break;
-      case 'SNOW':
-          topBlock = 'W'; // Snow Block (W for White/Winter)
-          fillBlock = 'D'; // Dirt
-          liquidBlock = 'I'; // Ice (Solid liquid?) or just Water. Let's make it Ice.
-          platformBlock = 'I';
-          break;
-      case 'NETHER':
-          topBlock = 'R'; // Netherrack (R for Red)
-          fillBlock = 'R';
-          liquidBlock = 'L';
-          platformBlock = 'O'; // Obsidian
-          break;
-      case 'THE_END':
-          topBlock = 'X'; // End Stone (Xenolith)
-          fillBlock = 'X';
-          liquidBlock = '.'; // Void
-          bedrockBlock = '.'; // No bedrock in End!
-          platformBlock = 'O'; // Obsidian
-          break;
+      case 'DESERT': topBlock = 'S'; fillBlock = 'A'; platformBlock = 'A'; break;
+      case 'SNOW': topBlock = 'W'; fillBlock = 'D'; liquidBlock = 'I'; platformBlock = 'I'; break;
+      case 'NETHER': topBlock = 'R'; fillBlock = 'R'; liquidBlock = 'L'; platformBlock = 'O'; break;
+      case 'THE_END': topBlock = 'X'; fillBlock = 'X'; liquidBlock = '.'; bedrockBlock = '.'; platformBlock = 'O'; break;
   }
 
   // Difficulty Config
@@ -45,45 +29,26 @@ export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType
   const platformChance = difficulty === 'EASY' ? 0.6 : 0.4;
   const enemySpawnRate = difficulty === 'EASY' ? 0.08 : (difficulty === 'HARD' ? 0.25 : 0.15);
 
-  // 1. Bedrock (Floor)
+  // 1. Bedrock
   if (biome !== 'THE_END') {
-      for (let x = 0; x < width; x++) {
-        map[height - 1][x] = bedrockBlock;
-      }
+      for (let x = 0; x < width; x++) map[height - 1][x] = bedrockBlock;
   }
 
   // 2. Terrain
-  let groundLevel = 2; // Blocks above bottom
-  
+  let groundLevel = 2;
   for (let x = 0; x < width; x++) {
-      // Start/End/Boss Arena flat
-      if (x < 15 || x > width - 30) {
-          groundLevel = 3; // Make end area slightly higher/stable
-      } else {
-          // Random terrain changes
-          if (Math.random() < 0.2) {
-              const change = Math.floor(Math.random() * 3) - 1; 
-              groundLevel += change;
-              groundLevel = Math.max(1, Math.min(groundLevel, 5)); 
-          }
-          
-          // Pits
-          if (Math.random() < pitChance && x > 20 && x < width - 40) {
-              groundLevel = 0; 
-          }
+      // Start and End safe zones
+      if (x < 15 || x > width - 30) groundLevel = 3;
+      else {
+          if (Math.random() < 0.2) groundLevel = Math.max(1, Math.min(groundLevel + (Math.floor(Math.random()*3)-1), 5)); 
+          if (Math.random() < pitChance && x > 20 && x < width - 40) groundLevel = 0; 
       }
 
-      // Fill Column
       if (groundLevel === 0) {
-          if (biome !== 'THE_END') {
-            map[height - 1][x] = liquidBlock; 
-          }
+          if (biome !== 'THE_END') map[height - 1][x] = liquidBlock; 
       } else {
           for (let h = 0; h < groundLevel; h++) {
               const y = height - 2 - h;
-              // If THE_END, offset everything up a bit so they don't fall into void immediately? 
-              // Actually existing logic places them at bottom. Let's just draw them.
-              
               if (h === groundLevel - 1) map[y][x] = topBlock;
               else map[y][x] = fillBlock;
           }
@@ -101,74 +66,47 @@ export const generateProceduralLevel = (difficulty: Difficulty, biome: BiomeType
       }
   }
 
-  // 4. Enemies
+  // 4. Enemies - Using Generic markers that will be resolved to specific mobs in GameCanvas based on Biome
+  // 'g' = ground mob, 'f' = flying mob, 't' = tank/special
   for (let x = 20; x < width - 30; x++) {
-      // Check column to find surface
       let surfaceY = -1;
       for (let y = 0; y < height; y++) {
-          if (map[y][x] !== '.') {
-              surfaceY = y - 1;
-              break;
-          }
+          if (map[y][x] !== '.') { surfaceY = y - 1; break; }
       }
 
-      // If we have a valid surface
       if (surfaceY > 3 && surfaceY < height - 2) {
           const blockBelow = map[surfaceY+1][x];
           if (blockBelow !== liquidBlock && blockBelow !== bedrockBlock && blockBelow !== '.') {
                if (Math.random() < enemySpawnRate) { 
-                   const roll = Math.random();
-                   
-                   // Biome specific enemy weights
-                   if (biome === 'NETHER') {
-                        if (roll < 0.6) map[surfaceY][x] = '^'; // Ghast more common
-                        else map[surfaceY][x] = 'Z'; // Pigman (Zombie)
-                   } else if (biome === 'THE_END') {
-                        map[surfaceY][x] = 'M'; // Enderman only
-                   } else {
-                        if (roll < 0.4) map[surfaceY][x] = 'Z'; 
-                        else if (roll < 0.7) map[surfaceY][x] = 'C'; 
-                        else map[surfaceY][x] = 'M'; 
-                   }
+                   // Randomly assign a type based on rarity
+                   const r = Math.random();
+                   if (r < 0.6) map[surfaceY][x] = 'g'; // Common ground
+                   else if (r < 0.85) map[surfaceY][x] = 's'; // Shooter/Special
+                   else map[surfaceY][x] = 't'; // Tank/Rare
                }
           }
       }
 
       // Flying Enemies
-      if (Math.random() < (difficulty === 'HARD' ? 0.04 : 0.02)) {
-          // In Nether, Ghasts are lower too
+      if (Math.random() < (difficulty === 'HARD' ? 0.05 : 0.02)) {
           const y = biome === 'NETHER' ? 4 + Math.floor(Math.random()*6) : 2 + Math.floor(Math.random()*3);
-          map[y][x] = '^';
+          map[y][x] = 'f';
       }
   }
 
   // 5. Boss & Exit
   const bossArenaStart = width - 25;
-  // Ensure flat platform for boss arena and portal
-  const arenaHeight = height - 5; // Fixed height for arena floor
-  
+  const arenaHeight = height - 5; 
   for (let x = bossArenaStart; x < width; x++) {
       for (let y = 0; y < height; y++) {
           if (y >= arenaHeight) {
-              if (biome === 'THE_END') {
-                  map[y][x] = 'X'; 
-              } else {
-                  map[y][x] = y === height - 1 ? bedrockBlock : fillBlock;
-              }
-          } else {
-              map[y][x] = '.';
-          }
+              map[y][x] = (biome === 'THE_END' ? 'X' : (y === height - 1 ? bedrockBlock : fillBlock));
+          } else map[y][x] = '.';
       }
-      // Top layer
-       if (biome !== 'THE_END') map[arenaHeight][x] = topBlock;
+      if (biome !== 'THE_END') map[arenaHeight][x] = topBlock;
   }
 
-  // Place Boss floating
   map[height-10][width-15] = 'B'; 
-  
-  // Place Portal at very end, ON TOP of the arena floor
-  // Arena floor is at arenaHeight (e.g., index 10). So Portal sits at 9.
-  // 'E' marks the bottom-left of the portal structure
   map[arenaHeight-1][width-6] = 'E';
 
   return map.map(r => r.join(''));
