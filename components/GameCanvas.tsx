@@ -740,7 +740,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ levelRaw, character, difficulty
         ref={canvasRef} 
         width={CANVAS_WIDTH} 
         height={CANVAS_HEIGHT}
-        className="block mx-auto border-4 border-gray-700 bg-black shadow-2xl rounded-sm max-w-full"
+        className="block mx-auto border-4 border-gray-700 bg-black shadow-2xl rounded-sm"
+        style={{ width: 'auto', height: 'auto', maxWidth: '100%', maxHeight: '100%', aspectRatio: `${CANVAS_WIDTH}/${CANVAS_HEIGHT}` }}
     />
   );
 };
