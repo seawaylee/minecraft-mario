@@ -1,5 +1,6 @@
 export type ScreenState = 'MENU' | 'CHARACTER_SELECT' | 'GAME' | 'GAME_OVER' | 'WIN' | 'GENERATING_LEVEL';
 export type Difficulty = 'EASY' | 'NORMAL' | 'HARD';
+export type Density = 'LOW' | 'MEDIUM' | 'HIGH';
 export type BiomeType = 'PLAINS' | 'DESERT' | 'SNOW' | 'NETHER' | 'THE_END';
 
 export enum CharacterType {
@@ -55,10 +56,9 @@ export interface PlayerState {
 export type EnemyType = 
   | 'ENEMY_CREEPER' | 'ENEMY_ZOMBIE' | 'ENEMY_SKELETON' | 'ENEMY_SPIDER' | 'ENEMY_SLIME' 
   | 'ENEMY_ENDERMAN' | 'ENEMY_WITCH' | 'ENEMY_PILLAGER' 
-  | 'ENEMY_GHAST' | 'ENEMY_BLAZE' | 'ENEMY_WITHER_SKELETON' | 'ENEMY_PIGMAN'
-  | 'ENEMY_PHANTOM' | 'ENEMY_DROWNED' | 'ENEMY_WARDEN' 
-  | 'ENEMY_BOSS';
-
+    | 'ENEMY_GHAST' | 'ENEMY_BLAZE' | 'ENEMY_WITHER_SKELETON' | 'ENEMY_PIGMAN'
+    | 'ENEMY_PHANTOM' | 'ENEMY_DROWNED' | 'ENEMY_WARDEN' | 'ENEMY_RAVAGER' | 'ENEMY_VINDICATOR'
+    | 'ENEMY_BOSS';
 export type ProjectileStyle = 
   | 'ARROW' | 'FIREBALL' | 'TNT' | 'PEARL' | 'BONE' | 'POTION' | 'SKULL' 
   | 'TRIDENT' | 'SNOWBALL' | 'SONIC_BOOM' | 'EGG' | 'DRAGON_BREATH' | 'EXPERIENCE';
@@ -79,6 +79,8 @@ export interface Entity {
   color?: string; // For particles
   projectileType?: ProjectileStyle; // For weapon customization
   attackCooldown?: number; // For enemies that shoot
+  noGravity?: boolean; // For auto-tracked projectiles
+  targetId?: string; // For homing projectiles
 }
 
 export interface Block {

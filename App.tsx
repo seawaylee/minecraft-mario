@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ScreenState, CharacterType, LevelData, Difficulty, BiomeType } from './types';
+import { ScreenState, CharacterType, LevelData, Difficulty, Density, BiomeType } from './types';
 import { DEFAULT_LEVEL_MAP, CHARACTERS } from './constants';
 import GameCanvas from './components/GameCanvas';
 import { audioController } from './utils/audio';
@@ -131,6 +131,8 @@ const MenuScreen = ({
   handleLevelGen,
   difficulty,
   setDifficulty,
+  density,
+  setDensity,
   biome,
   setBiome,
   lengthMultiplier,
@@ -146,6 +148,8 @@ const MenuScreen = ({
   handleLevelGen: () => void,
   difficulty: Difficulty,
   setDifficulty: (d: Difficulty) => void,
+  density: Density,
+  setDensity: (d: Density) => void,
   biome: BiomeType,
   setBiome: (b: BiomeType) => void,
   lengthMultiplier: number,
@@ -191,6 +195,26 @@ const MenuScreen = ({
                             }`}
                          >
                             {d === 'EASY' ? '简单' : d === 'NORMAL' ? '普通' : '困难'}
+                         </button>
+                     ))}
+                </div>
+            </div>
+
+            {/* Density Selector */}
+            <div className="bg-gray-800/90 p-4 rounded-xl border-2 border-gray-600 backdrop-blur-sm">
+                <label className="text-gray-400 text-sm mb-2 block uppercase font-bold tracking-wider">敌人密度</label>
+                <div className="flex gap-2">
+                     {['LOW', 'MEDIUM', 'HIGH'].map(d => (
+                         <button 
+                            key={d}
+                            onClick={() => setDensity(d as Density)}
+                            className={`flex-1 py-3 rounded-lg font-bold text-sm transition-all border-b-4 active:border-b-0 active:translate-y-1 ${
+                                density === d 
+                                ? 'bg-purple-600 border-purple-800 text-white' 
+                                : 'bg-gray-700 border-gray-900 text-gray-400'
+                            }`}
+                         >
+                            {d === 'LOW' ? '稀少' : d === 'MEDIUM' ? '适中' : '密集'}
                          </button>
                      ))}
                 </div>
@@ -351,6 +375,7 @@ export default function App() {
   const [character, setCharacter] = useState<CharacterType>(CharacterType.STEVE);
   const [score, setScore] = useState(0);
   const [difficulty, setDifficulty] = useState<Difficulty>('NORMAL');
+  const [density, setDensity] = useState<Density>('MEDIUM');
   const [biome, setBiome] = useState<BiomeType>('PLAINS');
   const [currentLevelMap, setCurrentLevelMap] = useState<string[]>(DEFAULT_LEVEL_MAP);
   const [isMuted, setIsMuted] = useState(false);
@@ -418,6 +443,8 @@ export default function App() {
                 handleLevelGen={handleLevelGen}
                 difficulty={difficulty}
                 setDifficulty={setDifficulty}
+                density={density}
+                setDensity={setDensity}
                 biome={biome}
                 setBiome={setBiome}
                 lengthMultiplier={lengthMultiplier}
@@ -466,6 +493,7 @@ export default function App() {
                         levelRaw={currentLevelMap} 
                         character={character}
                         difficulty={difficulty}
+                        density={density}
                         biome={biome}
                         onGameOver={() => setScreen('GAME_OVER')}
                         onWin={(finalScore) => { setScore(finalScore); setScreen('WIN'); audioController.playSFX('WIN'); }}

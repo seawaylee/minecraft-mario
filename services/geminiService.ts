@@ -1,11 +1,17 @@
 import { GoogleGenAI } from "@google/genai";
 import { DEFAULT_LEVEL_MAP } from "../constants";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let ai: GoogleGenAI | null = null;
+try {
+  ai = new GoogleGenAI(import.meta.env.VITE_GEMINI_API_KEY || "dummy_key");
+} catch (e) {
+  console.error("Failed to init Gemini Client:", e);
+}
 
 const FALLBACK_LEVEL = DEFAULT_LEVEL_MAP.join('\n');
 
 export const generateLevelWithAI = async (theme: string = "classic minecraft"): Promise<string[]> => {
+  if (!ai) return DEFAULT_LEVEL_MAP;
   const timestamp = Date.now(); // Add randomness to prompt
   
   const prompt = `
